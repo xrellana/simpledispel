@@ -206,7 +206,7 @@ Aura API 的版本变化必须尽量封装在 `AuraDisplay.lua`，避免扩散�
 
 #### 任务 1.4：显示和点击组合验证
 
-- [-] `0.10.0-beta.1` 实测点击 aura 图标未触发施法；`0.10.0-beta.2` 已启用原生 click propagation，等待复测。
+- [-] `beta.1` 图标点击未触发；`beta.2` 加入传播后空方块仍未观察到施法；`beta.3` 已固定 SecureActionButton 按下/抬起时机，等待复测。
 - [-] 已确认仅关闭 Aura Button 点击不能可靠传给父按钮；优先采用 `SetPropagateMouseClicks(true)`，失败时降级为 `SetPassThroughButtons("LeftButton")`。
 - [ ] 验证容器不会污染安全按钮。
 - [ ] 验证战斗中 aura 出现和消失时没有 Lua 错误。
@@ -444,9 +444,10 @@ Taint：无 / 有
 | 2026-08-16 | 0 | 12.1 aura 数据来源 | 暴雪要求使用过滤后的 Aura Container 显示 | 采用 Aura Container，不枚举 secret aura |
 | 2026-08-16 | 0 | 遇到 API 硬限制如何处理 | 用户明确要求不强行实现 | 停止对应功能并记录，不寻找绕过方式 |
 | 2026-08-16 | 1 | Aura 图标覆盖后点击未施法 | 地下城实测图标与倒计时正常，但点击未到达底层安全按钮 | 使用 12.1 原生鼠标点击传播；保留 LeftButton pass-through 降级 |
+| 2026-08-16 | 1 | 空方块点击未观察到施法 | 按钮只注册 `LeftButtonUp`，但 SecureActionButton 默认受 `ActionButtonUseKeyDown=1` 约束 | 同时注册按下/抬起并设置 `useOnKeyDown=false` |
 
 后续每个阶段的 API 差异、降级和停止决定都必须追加到此表。
 
 ## 9. 下一步
 
-先用 `0.10.0-beta.2` 在地下城复测 Aura 图标点击传播；通过后再完成一次团队实测，验证 5+40 固定单位按钮、当前目标保持、战斗锁定、40 容器性能以及 `/reload` 持久化。通过前不进入自动提醒或更多团队布局选项。
+先用 `0.10.0-beta.3` 在地下城复测安全按钮和 Aura 图标点击；通过后再完成一次团队实测，验证 5+40 固定单位按钮、当前目标保持、战斗锁定、40 容器性能以及 `/reload` 持久化。通过前不进入自动提醒或更多团队布局选项。

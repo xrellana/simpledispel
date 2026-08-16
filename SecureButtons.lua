@@ -38,10 +38,14 @@ function SecureButtons:Create(parent, globalName, unit, shortLabel, requestedSiz
     local buttonSize = tonumber(requestedSize) or BUTTON_SIZE
     local button = CreateFrame("Button", globalName, parent, "SecureActionButtonTemplate")
     button:SetSize(buttonSize, buttonSize)
-    button:RegisterForClicks("LeftButtonUp")
+    button:RegisterForClicks("LeftButtonUp", "LeftButtonDown")
 
     -- These attributes are static for the lifetime of the button.
     button:SetAttribute("unit", unit)
+    -- Do not depend on the account-wide ActionButtonUseKeyDown CVar. Register
+    -- both directions as required by SecureActionButtonTemplate, then execute
+    -- exactly once on mouse release.
+    button:SetAttribute("useOnKeyDown", false)
     button:SetAttribute("type1", nil)
     button:SetAttribute("spell1", nil)
 

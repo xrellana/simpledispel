@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.0-beta.3 — 2026-08-16
+
+- 修复安全按钮只注册 `LeftButtonUp`，在默认按下施法 CVar 下不执行动作的问题。
+- 同时注册 LeftButton 按下与抬起事件，并用 `useOnKeyDown=false` 明确只在抬起时施法一次。
+- 新增 SecureActionButton 点击注册、固定单位和施法属性专项测试。
+
 ## 0.10.0-beta.2 — 2026-08-16
 
 - 修复 Aura 图标覆盖安全按钮时，点击图标不能触发驱散的问题。
