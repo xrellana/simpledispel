@@ -279,6 +279,7 @@ Aura API 的版本变化必须尽量封装在 `AuraDisplay.lua`，避免扩散�
 - [x] 单人状态只显示自己。
 - [x] 小队按固定顺序显示五个方块。
 - [x] 不存在的 `partyN` 通过 secure state driver 隐藏。
+- [x] 小队方块直接显示队员名字；secret name 仅交给 FontString 显示，不参与逻辑。
 - [x] `/sd unlock` 解锁拖动。
 - [x] `/sd lock` 锁定位置。
 - [x] `/sd reset` 恢复默认位置。

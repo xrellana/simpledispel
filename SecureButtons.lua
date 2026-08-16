@@ -34,7 +34,7 @@ local function AddBorder(frame)
     right:SetWidth(1)
 end
 
-function SecureButtons:Create(parent, globalName, unit, shortLabel, requestedSize)
+function SecureButtons:Create(parent, globalName, unit, shortLabel, requestedSize, labelMode)
     local buttonSize = tonumber(requestedSize) or BUTTON_SIZE
     local button = CreateFrame("Button", globalName, parent, "SecureActionButtonTemplate")
     button:SetSize(buttonSize, buttonSize)
@@ -64,14 +64,22 @@ function SecureButtons:Create(parent, globalName, unit, shortLabel, requestedSiz
     spellTexture:SetAllPoints(button)
     spellTexture:SetAlpha(0.28)
 
-    local label = button:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    label:SetPoint("CENTER")
+    local label = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmallOutline")
+    if labelMode == "BOTTOM" then
+        label:SetPoint("BOTTOMLEFT", button, "BOTTOMLEFT", 2, 2)
+        label:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -2, 2)
+        label:SetJustifyH("CENTER")
+        label:SetWordWrap(false)
+    else
+        label:SetPoint("CENTER")
+    end
     label:SetText(shortLabel)
 
     AddBorder(button)
 
     button.simpleDispelSpellTexture = spellTexture
     button.simpleDispelLabel = label
+    button.simpleDispelFallbackLabel = shortLabel
     button.simpleDispelUnit = unit
     return button
 end

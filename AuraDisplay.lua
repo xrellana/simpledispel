@@ -11,7 +11,7 @@ AuraDisplay.Filters = {
     all = "HARMFUL|DISPELLABLE",
 }
 
-local function CreateAuraButtonInitializer(auraSize, showDuration)
+local function CreateAuraButtonInitializer(auraSize, showDuration, iconBottomInset)
     return function(auraButton)
         -- AuraButton surface methods may become forbidden after this callback.
         -- All setup is intentionally completed inside the initialization window.
@@ -42,15 +42,25 @@ local function CreateAuraButtonInitializer(auraSize, showDuration)
         end
 
         local icon = auraButton:CreateTexture(nil, "ARTWORK")
-        icon:SetAllPoints(auraButton)
+        if iconBottomInset > 0 then
+            icon:SetPoint("TOPLEFT", auraButton, "TOPLEFT", 0, 0)
+            icon:SetPoint("BOTTOMRIGHT", auraButton, "BOTTOMRIGHT", 0, iconBottomInset)
+        else
+            icon:SetAllPoints(auraButton)
+        end
         icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
 
         local cooldown = CreateFrame("Cooldown", nil, auraButton, "CooldownFrameTemplate")
-        cooldown:SetAllPoints(auraButton)
+        if iconBottomInset > 0 then
+            cooldown:SetPoint("TOPLEFT", auraButton, "TOPLEFT", 0, 0)
+            cooldown:SetPoint("BOTTOMRIGHT", auraButton, "BOTTOMRIGHT", 0, iconBottomInset)
+        else
+            cooldown:SetAllPoints(auraButton)
+        end
         cooldown:EnableMouse(false)
 
         local count = auraButton:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmallOutline")
-        count:SetPoint("BOTTOMRIGHT", auraButton, "BOTTOMRIGHT", -2, 2)
+        count:SetPoint("BOTTOMRIGHT", auraButton, "BOTTOMRIGHT", -2, iconBottomInset + 2)
 
         local duration
         if showDuration then
@@ -100,6 +110,7 @@ function AuraDisplay:Create(owner, unit, filterString, options)
     options = options or {}
     local auraSize = tonumber(options.size) or DEFAULT_AURA_SIZE
     local showDuration = options.showDuration ~= false
+    local iconBottomInset = tonumber(options.iconBottomInset) or 0
 
     local ok, container = pcall(
         CreateFrame,
@@ -116,7 +127,7 @@ function AuraDisplay:Create(owner, unit, filterString, options)
     container:SetPoint("CENTER", owner, "CENTER")
 
     local slotOK, auraButton = pcall(container.AddAuraSlot, container, "dispel", filterString, {
-        initializeFrame = CreateAuraButtonInitializer(auraSize, showDuration),
+        initializeFrame = CreateAuraButtonInitializer(auraSize, showDuration, iconBottomInset),
     })
     if not slotOK then
         container:Hide()

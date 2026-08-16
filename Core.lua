@@ -19,6 +19,7 @@ local DEFAULT_LAYOUTS = {
 addon.buttons = {}
 addon.auraContainers = {}
 addon.frames = {}
+addon.unitButtons = {}
 addon.pendingSpellRefresh = false
 addon.pendingLayoutRefresh = false
 
@@ -240,9 +241,11 @@ local function AddUnitButton(root, definition, buttonSize, filterString, showDur
         definition.name,
         definition.unit,
         definition.label,
-        buttonSize
+        buttonSize,
+        definition.labelMode
     )
     addon.buttons[#addon.buttons + 1] = button
+    addon.unitButtons[definition.unit] = button
 
     local container, auraError = addon.AuraDisplay:Create(
         button,
@@ -251,6 +254,7 @@ local function AddUnitButton(root, definition, buttonSize, filterString, showDur
         {
             size = buttonSize,
             showDuration = showDuration,
+            iconBottomInset = definition.iconBottomInset or 0,
         }
     )
     if container then
@@ -262,13 +266,32 @@ local function AddUnitButton(root, definition, buttonSize, filterString, showDur
     return button
 end
 
+local function UpdatePartyLabels()
+    local partyUnits = { "party1", "party2", "party3", "party4" }
+    for _, unit in ipairs(partyUnits) do
+        local button = addon.unitButtons[unit]
+        if button and button.simpleDispelLabel then
+            local unitName = GetUnitName and GetUnitName(unit, false)
+            if type(issecretvalue) == "function" and issecretvalue(unitName) then
+                -- Secret names may be displayed directly but must not be read,
+                -- compared, truncated, concatenated, or used for decisions.
+                button.simpleDispelLabel:SetText(unitName)
+            elseif type(unitName) == "string" and unitName ~= "" then
+                button.simpleDispelLabel:SetText(unitName)
+            else
+                button.simpleDispelLabel:SetText(button.simpleDispelFallbackLabel)
+            end
+        end
+    end
+end
+
 local function CreatePartyUI(filterString)
     local definitions = {
-        { unit = "player", name = "SimpleDispelPlayerButton", label = "YOU" },
-        { unit = "party1", name = "SimpleDispelParty1Button", label = "P1" },
-        { unit = "party2", name = "SimpleDispelParty2Button", label = "P2" },
-        { unit = "party3", name = "SimpleDispelParty3Button", label = "P3" },
-        { unit = "party4", name = "SimpleDispelParty4Button", label = "P4" },
+        { unit = "player", name = "SimpleDispelPlayerButton", label = "YOU", labelMode = "BOTTOM", iconBottomInset = 13 },
+        { unit = "party1", name = "SimpleDispelParty1Button", label = "P1", labelMode = "BOTTOM", iconBottomInset = 13 },
+        { unit = "party2", name = "SimpleDispelParty2Button", label = "P2", labelMode = "BOTTOM", iconBottomInset = 13 },
+        { unit = "party3", name = "SimpleDispelParty3Button", label = "P3", labelMode = "BOTTOM", iconBottomInset = 13 },
+        { unit = "party4", name = "SimpleDispelParty4Button", label = "P4", labelMode = "BOTTOM", iconBottomInset = 13 },
     }
     local width = (PARTY_BUTTON_SIZE * #definitions)
         + (PARTY_GAP * (#definitions - 1))
@@ -340,6 +363,7 @@ local function CreateUI()
     local filterString = addon.AuraDisplay:GetFilter(addon.db.filterMode)
     CreatePartyUI(filterString)
     CreateRaidUI(filterString)
+    UpdatePartyLabels()
     ApplyAllFrameSettings()
 
     if addon.auraError then
@@ -559,6 +583,9 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         CreateUI()
 
         self:RegisterEvent("PLAYER_LOGIN")
+        self:RegisterEvent("PLAYER_ENTERING_WORLD")
+        self:RegisterEvent("GROUP_ROSTER_UPDATE")
+        self:RegisterEvent("UNIT_NAME_UPDATE")
         self:RegisterEvent("PLAYER_REGEN_ENABLED")
         self:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
         self:RegisterEvent("SPELLS_CHANGED")
@@ -568,7 +595,12 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 
     if event == "PLAYER_LOGIN" then
         addon:RefreshSpell()
+        UpdatePartyLabels()
         Print("v" .. GetAddonVersion() .. " loaded; party + raid ready; use /sd status")
+    elseif event == "PLAYER_ENTERING_WORLD"
+        or event == "GROUP_ROSTER_UPDATE"
+        or event == "UNIT_NAME_UPDATE" then
+        UpdatePartyLabels()
     elseif event == "PLAYER_REGEN_ENABLED" then
         if addon.pendingSpellRefresh then
             addon:RefreshSpell()

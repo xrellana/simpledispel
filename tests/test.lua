@@ -114,7 +114,7 @@ end
 C_AddOns = {
     GetAddOnMetadata = function(_, field)
         if field == "Version" then
-            return "0.10.0-beta.3"
+            return "0.10.0-beta.4"
         end
     end,
 }
@@ -124,6 +124,21 @@ SimpleDispelDB = {
     scale = 0.90,
 }
 
+local unitNames = {
+    party1 = "Alice",
+    party2 = "Bob",
+    party3 = "Chen",
+    party4 = "Dora",
+}
+
+function GetUnitName(unit)
+    return unitNames[unit]
+end
+
+function issecretvalue()
+    return false
+end
+
 local addon = {}
 addon.SecureButtons = {
     BUTTON_SIZE = 48,
@@ -132,6 +147,12 @@ addon.SecureButtons = {
         button.unit = unit
         button.label = label
         button.requestedSize = size
+        button.simpleDispelFallbackLabel = label
+        button.simpleDispelLabel = {
+            SetText = function(self, text)
+                self.text = text
+            end,
+        }
         createdButtons[#createdButtons + 1] = button
         return button
     end,
@@ -198,6 +219,8 @@ assert(createdButtons[45].unit == "raid40", "last raid unit must be raid40")
 assert(createdButtons[1].requestedSize == 48, "party button size is wrong")
 assert(createdButtons[6].requestedSize == 32, "raid button size is wrong")
 assert(#addon.auraContainers == 45, "every unit must get one aura container")
+assert(createdButtons[2].simpleDispelLabel.text == "Alice", "party1 name label was not updated")
+assert(createdButtons[5].simpleDispelLabel.text == "Dora", "party4 name label was not updated")
 
 local partyVisibility
 local raidVisibility

@@ -30,6 +30,12 @@ local function NewRegion()
     function region:SetPoint()
     end
 
+    function region:SetJustifyH()
+    end
+
+    function region:SetWordWrap()
+    end
+
     function region:SetHeight()
     end
 
