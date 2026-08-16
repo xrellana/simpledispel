@@ -1,0 +1,77 @@
+name: Release addon
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "*.lua"
+      - "*.toc"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: addon-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Package and publish
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Validate version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="$(sed -n 's/^## Version:[[:space:]]*//p' SimpleDispel.toc | tr -d '\r' | head -n 1)"
+
+          if [[ -z "${version}" ]]; then
+            echo "SimpleDispel.toc does not contain a Version field." >&2
+            exit 1
+          fi
+
+          if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]; then
+            echo "TOC version must use X.Y.Z or X.Y.Z-prerelease format; received '${version}'." >&2
+            exit 1
+          fi
+
+          tag="v${version}"
+          if git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null 2>&1 \
+            || gh release view "${tag}" >/dev/null 2>&1; then
+            echo "Tag or release ${tag} already exists. Bump the TOC version before merging addon changes." >&2
+            exit 1
+          fi
+
+          echo "ADDON_VERSION=${version}" >> "${GITHUB_ENV}"
+          echo "RELEASE_TAG=${tag}" >> "${GITHUB_ENV}"
+
+      - name: Build release archive
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          archive="SimpleDispel-${ADDON_VERSION}.zip"
+          mkdir -p dist/SimpleDispel
+          install -m 0644 ./*.lua ./*.toc dist/SimpleDispel/
+          (cd dist && zip -r "../${archive}" SimpleDispel)
+
+          echo "Archive contents:"
+          unzip -Z1 "${archive}"
+          echo "ARCHIVE_NAME=${archive}" >> "${GITHUB_ENV}"
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${RELEASE_TAG}" "${ARCHIVE_NAME}" \
+            --target "${GITHUB_SHA}" \
+            --generate-notes \
+            --title "SimpleDispel ${RELEASE_TAG}"
