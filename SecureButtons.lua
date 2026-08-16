@@ -34,10 +34,11 @@ local function AddBorder(frame)
     right:SetWidth(1)
 end
 
-function SecureButtons:Create(parent, globalName, unit, shortLabel, requestedSize, labelMode)
-    local buttonSize = tonumber(requestedSize) or BUTTON_SIZE
+function SecureButtons:Create(parent, globalName, unit, shortLabel, requestedWidth, labelMode, requestedHeight)
+    local buttonWidth = tonumber(requestedWidth) or BUTTON_SIZE
+    local buttonHeight = tonumber(requestedHeight) or buttonWidth
     local button = CreateFrame("Button", globalName, parent, "SecureActionButtonTemplate")
-    button:SetSize(buttonSize, buttonSize)
+    button:SetSize(buttonWidth, buttonHeight)
     button:RegisterForClicks("LeftButtonUp", "LeftButtonDown")
 
     -- These attributes are static for the lifetime of the button.
@@ -61,7 +62,13 @@ function SecureButtons:Create(parent, globalName, unit, shortLabel, requestedSiz
     background:SetColorTexture(0.035, 0.04, 0.05, 0.92)
 
     local spellTexture = button:CreateTexture(nil, "ARTWORK")
-    spellTexture:SetAllPoints(button)
+    if labelMode == "RIGHT" then
+        spellTexture:SetPoint("TOPLEFT", button, "TOPLEFT", 0, 0)
+        spellTexture:SetPoint("BOTTOMLEFT", button, "BOTTOMLEFT", 0, 0)
+        spellTexture:SetWidth(buttonHeight)
+    else
+        spellTexture:SetAllPoints(button)
+    end
     spellTexture:SetAlpha(0.28)
 
     local label = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmallOutline")
@@ -69,6 +76,11 @@ function SecureButtons:Create(parent, globalName, unit, shortLabel, requestedSiz
         label:SetPoint("BOTTOMLEFT", button, "BOTTOMLEFT", 2, 2)
         label:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -2, 2)
         label:SetJustifyH("CENTER")
+        label:SetWordWrap(false)
+    elseif labelMode == "RIGHT" then
+        label:SetPoint("LEFT", button, "LEFT", buttonHeight + 3, 0)
+        label:SetPoint("RIGHT", button, "RIGHT", -3, 0)
+        label:SetJustifyH("LEFT")
         label:SetWordWrap(false)
     else
         label:SetPoint("CENTER")

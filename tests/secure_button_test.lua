@@ -128,4 +128,19 @@ assert(#stateDrivers == 1, "party button must have one visibility driver")
 assert(stateDrivers[1].frame == partyButton, "visibility driver targets the wrong button")
 assert(stateDrivers[1].conditional == "[@party1,exists] show; hide", "visibility condition is wrong")
 
+local raidButton = addon.SecureButtons:Create(
+    NewRegion(),
+    "SimpleDispelTestRaidButton",
+    "raid1",
+    "1",
+    96,
+    "RIGHT",
+    32
+)
+assert(raidButton.width == 96, "raid button width is wrong")
+assert(raidButton.height == 32, "raid button height is wrong")
+assert(raidButton.simpleDispelFallbackLabel == "1", "raid fallback label is wrong")
+assert(#stateDrivers == 2, "raid button must have its own visibility driver")
+assert(stateDrivers[2].conditional == "[@raid1,exists] show; hide", "raid visibility condition is wrong")
+
 print("SimpleDispel secure button action: PASS")

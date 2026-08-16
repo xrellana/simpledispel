@@ -117,9 +117,21 @@ local container, errorMessage = addon.AuraDisplay:Create(
 
 assert(container, tostring(errorMessage))
 assert(initializedAuraButton, "Aura Button initializer did not run")
+assert(initializedAuraButton.width == 48, "legacy square aura width is wrong")
+assert(initializedAuraButton.height == 48, "legacy square aura height is wrong")
 assert(initializedAuraButton.mouseClickEnabled == true, "Aura Button clicks were not enabled")
 assert(initializedAuraButton.propagateMouseClicks == true, "mouse click propagation was not enabled")
 assert(initializedAuraButton.mouseMotionEnabled == true, "native aura hover was not preserved")
 assert(not initializedAuraButton.passThroughButtons, "fallback should not run when propagation succeeds")
+
+local raidContainer, raidError = addon.AuraDisplay:Create(
+    owner,
+    "raid1",
+    "HARMFUL|RAID",
+    { width = 32, height = 32, anchor = "LEFT", showDuration = false }
+)
+assert(raidContainer, tostring(raidError))
+assert(initializedAuraButton.width == 32, "rectangular owner aura width is wrong")
+assert(initializedAuraButton.height == 32, "rectangular owner aura height is wrong")
 
 print("SimpleDispel aura input propagation: PASS")

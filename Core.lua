@@ -3,7 +3,9 @@ local addonName, addon = ...
 local PREFIX = "|cff4ee6a8SimpleDispel|r:"
 local FILTER_HELP = "mine (HARMFUL|RAID), group, all"
 local PARTY_BUTTON_SIZE = 48
-local RAID_BUTTON_SIZE = 32
+local RAID_BUTTON_WIDTH = 96
+local RAID_BUTTON_HEIGHT = 32
+local RAID_COLUMNS = 5
 local PARTY_GAP = 6
 local RAID_GAP = 4
 local FRAME_PADDING = 4
@@ -22,6 +24,7 @@ addon.frames = {}
 addon.unitButtons = {}
 addon.pendingSpellRefresh = false
 addon.pendingLayoutRefresh = false
+addon.pendingRaidSizeRefresh = false
 
 local function Print(message)
     print(PREFIX, message)
@@ -235,14 +238,16 @@ local function CreateRoot(layoutKey, globalName, titleBase, width, height, visib
     return frameInfo
 end
 
-local function AddUnitButton(root, definition, buttonSize, filterString, showDuration)
+local function AddUnitButton(root, definition, buttonWidth, filterString, showDuration, buttonHeight)
+    buttonHeight = buttonHeight or buttonWidth
     local button = addon.SecureButtons:Create(
         root,
         definition.name,
         definition.unit,
         definition.label,
-        buttonSize,
-        definition.labelMode
+        buttonWidth,
+        definition.labelMode,
+        buttonHeight
     )
     addon.buttons[#addon.buttons + 1] = button
     addon.unitButtons[definition.unit] = button
@@ -252,7 +257,9 @@ local function AddUnitButton(root, definition, buttonSize, filterString, showDur
         definition.unit,
         filterString,
         {
-            size = buttonSize,
+            width = definition.auraWidth or buttonWidth,
+            height = definition.auraHeight or buttonHeight,
+            anchor = definition.auraAnchor or "CENTER",
             showDuration = showDuration,
             iconBottomInset = definition.iconBottomInset or 0,
         }
@@ -266,22 +273,32 @@ local function AddUnitButton(root, definition, buttonSize, filterString, showDur
     return button
 end
 
-local function UpdatePartyLabels()
-    local partyUnits = { "party1", "party2", "party3", "party4" }
-    for _, unit in ipairs(partyUnits) do
-        local button = addon.unitButtons[unit]
-        if button and button.simpleDispelLabel then
-            local unitName = GetUnitName and GetUnitName(unit, false)
-            if type(issecretvalue) == "function" and issecretvalue(unitName) then
-                -- Secret names may be displayed directly but must not be read,
-                -- compared, truncated, concatenated, or used for decisions.
-                button.simpleDispelLabel:SetText(unitName)
-            elseif type(unitName) == "string" and unitName ~= "" then
-                button.simpleDispelLabel:SetText(unitName)
-            else
-                button.simpleDispelLabel:SetText(button.simpleDispelFallbackLabel)
-            end
-        end
+local function UpdateUnitLabel(unit)
+    local button = addon.unitButtons[unit]
+    if not button or not button.simpleDispelLabel then
+        return
+    end
+
+    local unitName = GetUnitName and GetUnitName(unit, false)
+    if type(issecretvalue) == "function" and issecretvalue(unitName) then
+        -- Secret names may be displayed directly but must not be read,
+        -- compared, truncated, concatenated, or used for decisions.
+        button.simpleDispelLabel:SetText(unitName)
+    elseif type(unitName) == "string" and unitName ~= "" then
+        button.simpleDispelLabel:SetText(unitName)
+    else
+        button.simpleDispelLabel:SetText(button.simpleDispelFallbackLabel)
+    end
+end
+
+local function UpdateGroupLabels()
+    for index = 1, 4 do
+        UpdateUnitLabel("party" .. index)
+    end
+    -- Keep the protected raid1..raid40 binding and Blizzard roster order.
+    -- Names are display-only and never participate in sorting or decisions.
+    for index = 1, 40 do
+        UpdateUnitLabel("raid" .. index)
     end
 end
 
@@ -319,20 +336,46 @@ local function CreatePartyUI(filterString)
     end
 end
 
-local function CreateRaidUI(filterString)
-    local columns = 8
-    local rows = 5
-    local width = (RAID_BUTTON_SIZE * columns)
-        + (RAID_GAP * (columns - 1))
-        + (FRAME_PADDING * 2)
-    local height = (RAID_BUTTON_SIZE * rows)
+local function GetRaidRows()
+    local memberCount = 0
+    if GetNumGroupMembers then
+        memberCount = tonumber(GetNumGroupMembers()) or 0
+    end
+    memberCount = math.max(1, math.min(40, memberCount))
+    return math.ceil(memberCount / RAID_COLUMNS)
+end
+
+local function GetRaidFrameHeight()
+    local rows = GetRaidRows()
+    return (RAID_BUTTON_HEIGHT * rows)
         + (RAID_GAP * (rows - 1))
         + HANDLE_HEIGHT
         + (FRAME_PADDING * 2)
+end
+
+local function RefreshRaidFrameSize()
+    local frameInfo = addon.frames.raid
+    if not frameInfo then
+        return
+    end
+    if InCombatLockdown() then
+        addon.pendingRaidSizeRefresh = true
+        return
+    end
+
+    frameInfo.root:SetHeight(GetRaidFrameHeight())
+    addon.pendingRaidSizeRefresh = false
+end
+
+local function CreateRaidUI(filterString)
+    local width = (RAID_BUTTON_WIDTH * RAID_COLUMNS)
+        + (RAID_GAP * (RAID_COLUMNS - 1))
+        + (FRAME_PADDING * 2)
+    local height = GetRaidFrameHeight()
     local frameInfo = CreateRoot(
         "raid",
         "SimpleDispelRaidFrame",
-        "SimpleDispel Raid 1-40",
+        "SimpleDispel Raid",
         width,
         height,
         "[group:raid] show; hide"
@@ -343,18 +386,23 @@ local function CreateRaidUI(filterString)
             unit = "raid" .. index,
             name = "SimpleDispelRaid" .. index .. "Button",
             label = tostring(index),
+            labelMode = "RIGHT",
+            auraWidth = RAID_BUTTON_HEIGHT,
+            auraHeight = RAID_BUTTON_HEIGHT,
+            auraAnchor = "LEFT",
         }
         local button = AddUnitButton(
             frameInfo.root,
             definition,
-            RAID_BUTTON_SIZE,
+            RAID_BUTTON_WIDTH,
             filterString,
-            false
+            false,
+            RAID_BUTTON_HEIGHT
         )
-        local column = math.floor((index - 1) / rows)
-        local row = (index - 1) % rows
-        local x = FRAME_PADDING + (column * (RAID_BUTTON_SIZE + RAID_GAP))
-        local y = -(HANDLE_HEIGHT + FRAME_PADDING + (row * (RAID_BUTTON_SIZE + RAID_GAP)))
+        local column = (index - 1) % RAID_COLUMNS
+        local row = math.floor((index - 1) / RAID_COLUMNS)
+        local x = FRAME_PADDING + (column * (RAID_BUTTON_WIDTH + RAID_GAP))
+        local y = -(HANDLE_HEIGHT + FRAME_PADDING + (row * (RAID_BUTTON_HEIGHT + RAID_GAP)))
         button:SetPoint("TOPLEFT", frameInfo.root, "TOPLEFT", x, y)
     end
 end
@@ -363,7 +411,7 @@ local function CreateUI()
     local filterString = addon.AuraDisplay:GetFilter(addon.db.filterMode)
     CreatePartyUI(filterString)
     CreateRaidUI(filterString)
-    UpdatePartyLabels()
+    UpdateGroupLabels()
     ApplyAllFrameSettings()
 
     if addon.auraError then
@@ -595,12 +643,15 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 
     if event == "PLAYER_LOGIN" then
         addon:RefreshSpell()
-        UpdatePartyLabels()
+        UpdateGroupLabels()
+        RefreshRaidFrameSize()
         Print("v" .. GetAddonVersion() .. " loaded; party + raid ready; use /sd status")
     elseif event == "PLAYER_ENTERING_WORLD"
-        or event == "GROUP_ROSTER_UPDATE"
-        or event == "UNIT_NAME_UPDATE" then
-        UpdatePartyLabels()
+        or event == "GROUP_ROSTER_UPDATE" then
+        UpdateGroupLabels()
+        RefreshRaidFrameSize()
+    elseif event == "UNIT_NAME_UPDATE" then
+        UpdateGroupLabels()
     elseif event == "PLAYER_REGEN_ENABLED" then
         if addon.pendingSpellRefresh then
             addon:RefreshSpell()
@@ -609,6 +660,9 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
             ApplyAllFrameSettings()
         else
             UpdateLockState()
+        end
+        if addon.pendingRaidSizeRefresh then
+            RefreshRaidFrameSize()
         end
     elseif event == "PLAYER_SPECIALIZATION_CHANGED"
         or event == "SPELLS_CHANGED"

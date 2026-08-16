@@ -3,6 +3,7 @@ local createdButtons = {}
 local stateDrivers = {}
 local inRaid = false
 local inCombat = false
+local groupMemberCount = 0
 
 local objectMethods = {}
 
@@ -107,6 +108,10 @@ function IsInRaid()
     return inRaid
 end
 
+function GetNumGroupMembers()
+    return groupMemberCount
+end
+
 function GetBuildInfo()
     return "12.1.0", "12345", "Aug 2026", 120100
 end
@@ -114,7 +119,7 @@ end
 C_AddOns = {
     GetAddOnMetadata = function(_, field)
         if field == "Version" then
-            return "0.10.0-beta.4"
+            return "0.10.0-beta.5"
         end
     end,
 }
@@ -129,6 +134,8 @@ local unitNames = {
     party2 = "Bob",
     party3 = "Chen",
     party4 = "Dora",
+    raid1 = "RaidAlice",
+    raid40 = "RaidZed",
 }
 
 function GetUnitName(unit)
@@ -142,11 +149,13 @@ end
 local addon = {}
 addon.SecureButtons = {
     BUTTON_SIZE = 48,
-    Create = function(_, parent, globalName, unit, label, size)
+    Create = function(_, parent, globalName, unit, label, width, labelMode, height)
         local button = CreateFrame("Button", globalName, parent, "SecureActionButtonTemplate")
         button.unit = unit
         button.label = label
-        button.requestedSize = size
+        button.requestedWidth = width
+        button.requestedHeight = height or width
+        button.labelMode = labelMode
         button.simpleDispelFallbackLabel = label
         button.simpleDispelLabel = {
             SetText = function(self, text)
@@ -216,19 +225,36 @@ assert(createdButtons[1].unit == "player", "first party unit must be player")
 assert(createdButtons[5].unit == "party4", "fifth party unit must be party4")
 assert(createdButtons[6].unit == "raid1", "first raid unit must be raid1")
 assert(createdButtons[45].unit == "raid40", "last raid unit must be raid40")
-assert(createdButtons[1].requestedSize == 48, "party button size is wrong")
-assert(createdButtons[6].requestedSize == 32, "raid button size is wrong")
+assert(createdButtons[1].requestedWidth == 48, "party button width is wrong")
+assert(createdButtons[1].requestedHeight == 48, "party button height is wrong")
+assert(createdButtons[6].requestedWidth == 96, "raid button width is wrong")
+assert(createdButtons[6].requestedHeight == 32, "raid button height is wrong")
 assert(#addon.auraContainers == 45, "every unit must get one aura container")
 assert(createdButtons[2].simpleDispelLabel.text == "Alice", "party1 name label was not updated")
 assert(createdButtons[5].simpleDispelLabel.text == "Dora", "party4 name label was not updated")
+assert(createdButtons[6].simpleDispelLabel.text == "RaidAlice", "raid1 name label was not updated")
+assert(createdButtons[45].simpleDispelLabel.text == "RaidZed", "raid40 name label was not updated")
+assert(createdButtons[6].labelMode == "RIGHT", "raid name must be placed beside the icon")
+assert(addon.auraContainers[6].options.width == 32, "raid aura width is wrong")
+assert(addon.auraContainers[6].options.height == 32, "raid aura height is wrong")
+assert(addon.auraContainers[6].options.anchor == "LEFT", "raid aura must be left-aligned")
+
+local raid1Point = createdButtons[6].point
+local raid5Point = createdButtons[10].point
+local raid6Point = createdButtons[11].point
+assert(raid1Point[4] == raid6Point[4], "raid1 and raid6 must stay in the first column")
+assert(raid1Point[5] == raid5Point[5], "raid1 through raid5 must stay in the first row")
+assert(raid6Point[5] < raid1Point[5], "raid6 must start the second row")
 
 local partyVisibility
 local raidVisibility
+local raidRoot
 for _, driver in ipairs(stateDrivers) do
     if driver.frame.globalName == "SimpleDispelPartyFrame" then
         partyVisibility = driver.conditional
     elseif driver.frame.globalName == "SimpleDispelRaidFrame" then
         raidVisibility = driver.conditional
+        raidRoot = driver.frame
     end
 end
 assert(partyVisibility == "[group:raid] hide; show", "party visibility driver is wrong")
@@ -242,6 +268,18 @@ SlashCmdList.SIMPLEDISPEL("scale raid 0.75")
 assert(SimpleDispelDB.layouts.raid.scale == 0.75, "explicit raid scale command failed")
 
 inRaid = true
+local raidHeightCases = {
+    { members = 10, height = 98 },
+    { members = 20, height = 170 },
+    { members = 30, height = 242 },
+    { members = 40, height = 314 },
+    { members = 25, height = 206 },
+}
+for _, case in ipairs(raidHeightCases) do
+    groupMemberCount = case.members
+    eventFrame.scripts.OnEvent(eventFrame, "GROUP_ROSTER_UPDATE")
+    assert(raidRoot.height == case.height, case.members .. "-player raid frame height is wrong")
+end
 SlashCmdList.SIMPLEDISPEL("scale 0.80")
 assert(SimpleDispelDB.layouts.raid.scale == 0.80, "active raid scale command failed")
 
@@ -250,10 +288,16 @@ assert(SimpleDispelDB.layouts.party.scale == 1.00, "party reset failed")
 assert(SimpleDispelDB.layouts.raid.scale == 1.00, "raid reset failed")
 
 inCombat = true
+groupMemberCount = 40
+eventFrame.scripts.OnEvent(eventFrame, "GROUP_ROSTER_UPDATE")
+assert(addon.pendingRaidSizeRefresh, "combat raid resize was not deferred")
+assert(raidRoot.height == 206, "raid frame resized during combat")
 SlashCmdList.SIMPLEDISPEL("scale raid 0.85")
 assert(addon.pendingLayoutRefresh, "combat layout update was not deferred")
 inCombat = false
 eventFrame.scripts.OnEvent(eventFrame, "PLAYER_REGEN_ENABLED")
 assert(not addon.pendingLayoutRefresh, "deferred layout update was not applied")
+assert(not addon.pendingRaidSizeRefresh, "deferred raid resize was not applied")
+assert(raidRoot.height == 314, "40-player raid frame must use eight rows")
 
 print("SimpleDispel mock runtime: PASS")

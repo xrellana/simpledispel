@@ -11,11 +11,11 @@ AuraDisplay.Filters = {
     all = "HARMFUL|DISPELLABLE",
 }
 
-local function CreateAuraButtonInitializer(auraSize, showDuration, iconBottomInset)
+local function CreateAuraButtonInitializer(auraWidth, auraHeight, showDuration, iconBottomInset)
     return function(auraButton)
         -- AuraButton surface methods may become forbidden after this callback.
         -- All setup is intentionally completed inside the initialization window.
-        auraButton:SetSize(auraSize, auraSize)
+        auraButton:SetSize(auraWidth, auraHeight)
 
         -- AuraButton is visually above the secure unit button. Disabling its
         -- click handling does not guarantee that the event reaches the frame
@@ -108,7 +108,9 @@ function AuraDisplay:Create(owner, unit, filterString, options)
     end
 
     options = options or {}
-    local auraSize = tonumber(options.size) or DEFAULT_AURA_SIZE
+    local auraWidth = tonumber(options.width) or tonumber(options.size) or DEFAULT_AURA_SIZE
+    local auraHeight = tonumber(options.height) or tonumber(options.size) or DEFAULT_AURA_SIZE
+    local anchor = options.anchor or "CENTER"
     local showDuration = options.showDuration ~= false
     local iconBottomInset = tonumber(options.iconBottomInset) or 0
 
@@ -124,10 +126,10 @@ function AuraDisplay:Create(owner, unit, filterString, options)
     end
 
     container:SetSize(1, 1)
-    container:SetPoint("CENTER", owner, "CENTER")
+    container:SetPoint(anchor, owner, anchor)
 
     local slotOK, auraButton = pcall(container.AddAuraSlot, container, "dispel", filterString, {
-        initializeFrame = CreateAuraButtonInitializer(auraSize, showDuration, iconBottomInset),
+        initializeFrame = CreateAuraButtonInitializer(auraWidth, auraHeight, showDuration, iconBottomInset),
     })
     if not slotOK then
         container:Hide()
@@ -136,7 +138,7 @@ function AuraDisplay:Create(owner, unit, filterString, options)
 
     local anchorOK, anchorError = pcall(function()
         auraButton:ClearAllPoints()
-        auraButton:SetPoint("CENTER", owner, "CENTER")
+        auraButton:SetPoint(anchor, owner, anchor)
     end)
     if not anchorOK then
         container:Hide()
