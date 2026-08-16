@@ -2,10 +2,25 @@ local addonName, addon = ...
 
 local PREFIX = "|cff4ee6a8SimpleDispel|r:"
 local FILTER_HELP = "mine (HARMFUL|RAID), group, all"
+local PARTY_BUTTON_SIZE = 48
+local RAID_BUTTON_SIZE = 32
+local PARTY_GAP = 6
+local RAID_GAP = 4
+local FRAME_PADDING = 4
+local HANDLE_HEIGHT = 22
+local MIN_SCALE = 0.60
+local MAX_SCALE = 2.00
+
+local DEFAULT_LAYOUTS = {
+    party = { point = "CENTER", relativePoint = "CENTER", x = 0, y = -180, scale = 1.00 },
+    raid = { point = "CENTER", relativePoint = "CENTER", x = 0, y = -40, scale = 1.00 },
+}
 
 addon.buttons = {}
 addon.auraContainers = {}
+addon.frames = {}
 addon.pendingSpellRefresh = false
+addon.pendingLayoutRefresh = false
 
 local function Print(message)
     print(PREFIX, message)
@@ -23,59 +38,312 @@ local function GetAddonVersion()
     return "unknown"
 end
 
+local function NewDefaultLayout(layoutKey)
+    local defaults = DEFAULT_LAYOUTS[layoutKey]
+    return {
+        position = {
+            point = defaults.point,
+            relativePoint = defaults.relativePoint,
+            x = defaults.x,
+            y = defaults.y,
+        },
+        scale = defaults.scale,
+    }
+end
+
+local function NormalizeLayout(layoutKey, layout)
+    local defaults = DEFAULT_LAYOUTS[layoutKey]
+    if type(layout) ~= "table" then
+        return NewDefaultLayout(layoutKey)
+    end
+
+    if type(layout.position) ~= "table" then
+        layout.position = {
+            point = defaults.point,
+            relativePoint = defaults.relativePoint,
+            x = defaults.x,
+            y = defaults.y,
+        }
+    end
+    if type(layout.scale) ~= "number" then
+        layout.scale = defaults.scale
+    end
+    return layout
+end
+
 local function InitializeDatabase()
     if type(SimpleDispelDB) ~= "table" then
         SimpleDispelDB = {}
     end
 
-    SimpleDispelDB.schemaVersion = 1
+    SimpleDispelDB.schemaVersion = 3
     SimpleDispelDB.filterMode = SimpleDispelDB.filterMode or "mine"
+    if type(SimpleDispelDB.locked) ~= "boolean" then
+        SimpleDispelDB.locked = false
+    end
+    if type(SimpleDispelDB.layouts) ~= "table" then
+        SimpleDispelDB.layouts = {}
+    end
+
+    -- Migrate the original single-layout settings into the party layout.
+    if type(SimpleDispelDB.layouts.party) ~= "table" then
+        local partyLayout = NewDefaultLayout("party")
+        if type(SimpleDispelDB.position) == "table" then
+            partyLayout.position = SimpleDispelDB.position
+        end
+        if type(SimpleDispelDB.scale) == "number" then
+            partyLayout.scale = SimpleDispelDB.scale
+        end
+        SimpleDispelDB.layouts.party = partyLayout
+    end
+
+    SimpleDispelDB.layouts.party = NormalizeLayout("party", SimpleDispelDB.layouts.party)
+    SimpleDispelDB.layouts.raid = NormalizeLayout("raid", SimpleDispelDB.layouts.raid)
     addon.db = SimpleDispelDB
 end
 
-local function CreatePrototypeUI()
-    local root = CreateFrame("Frame", "SimpleDispelPrototype", UIParent)
-    root:SetSize(106, 76)
-    root:SetPoint("CENTER", UIParent, "CENTER", 0, -180)
+local function GetActiveLayoutKey()
+    if IsInRaid and IsInRaid() then
+        return "raid"
+    end
+    return "party"
+end
 
-    local title = root:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    title:SetPoint("BOTTOM", root, "TOP", 0, 12)
-    title:SetText("SimpleDispel 12.1 Spike")
-
-    local definitions = {
-        { unit = "player", name = "SimpleDispelPlayerButton", label = "SELF", x = 0 },
-        { unit = "party1", name = "SimpleDispelParty1Button", label = "P1", x = 58 },
-    }
-
-    local filterString = addon.AuraDisplay:GetFilter(addon.db.filterMode)
-    local auraFailure
-
-    for _, definition in ipairs(definitions) do
-        local button = addon.SecureButtons:Create(
-            root,
-            definition.name,
-            definition.unit,
-            definition.label
-        )
-        button:SetPoint("BOTTOMLEFT", root, "BOTTOMLEFT", definition.x, 0)
-        addon.buttons[#addon.buttons + 1] = button
-
-        local container, auraError = addon.AuraDisplay:Create(
-            button,
-            definition.unit,
-            filterString
-        )
-        if container then
-            addon.auraContainers[#addon.auraContainers + 1] = container
-        else
-            auraFailure = auraFailure or tostring(auraError)
-        end
+local function SavePosition(layoutKey, root)
+    if not root or InCombatLockdown() then
+        return
     end
 
-    addon.root = root
-    addon.auraError = auraFailure
-    if auraFailure then
-        Print("AuraContainer prototype unavailable: " .. auraFailure)
+    local point, _, relativePoint, x, y = root:GetPoint(1)
+    local defaults = DEFAULT_LAYOUTS[layoutKey]
+    addon.db.layouts[layoutKey].position = {
+        point = point or defaults.point,
+        relativePoint = relativePoint or defaults.relativePoint,
+        x = tonumber(x) or defaults.x,
+        y = tonumber(y) or defaults.y,
+    }
+end
+
+local function UpdateLockState()
+    if InCombatLockdown() then
+        addon.pendingLayoutRefresh = true
+        return
+    end
+
+    local canDrag = not addon.db.locked and not InCombatLockdown()
+    for _, frameInfo in pairs(addon.frames) do
+        frameInfo.dragHandle:EnableMouse(canDrag)
+        frameInfo.dragHandle:SetAlpha(addon.db.locked and 0.72 or 1)
+        local title = frameInfo.titleBase
+        if not addon.db.locked then
+            title = title .. "  |cffaaaaaa(drag)|r"
+        end
+        frameInfo.title:SetText(title)
+    end
+end
+
+local function ApplyFrameSettings(layoutKey)
+    local frameInfo = addon.frames[layoutKey]
+    if not frameInfo then
+        return
+    end
+    if InCombatLockdown() then
+        addon.pendingLayoutRefresh = true
+        return
+    end
+
+    local defaults = DEFAULT_LAYOUTS[layoutKey]
+    local layout = addon.db.layouts[layoutKey]
+    local position = layout.position or {}
+    frameInfo.root:SetScale(math.max(MIN_SCALE, math.min(MAX_SCALE, layout.scale or defaults.scale)))
+    frameInfo.root:ClearAllPoints()
+    frameInfo.root:SetPoint(
+        position.point or defaults.point,
+        UIParent,
+        position.relativePoint or defaults.relativePoint,
+        tonumber(position.x) or defaults.x,
+        tonumber(position.y) or defaults.y
+    )
+end
+
+local function ApplyAllFrameSettings()
+    if InCombatLockdown() then
+        addon.pendingLayoutRefresh = true
+        return
+    end
+
+    ApplyFrameSettings("party")
+    ApplyFrameSettings("raid")
+    addon.pendingLayoutRefresh = false
+    UpdateLockState()
+end
+
+local function CreateRoot(layoutKey, globalName, titleBase, width, height, visibilityDriver)
+    local root = CreateFrame("Frame", globalName, UIParent)
+    root:SetSize(width, height)
+    root:SetFrameStrata("MEDIUM")
+    root:SetMovable(true)
+    root:SetClampedToScreen(true)
+
+    local background = root:CreateTexture(nil, "BACKGROUND")
+    background:SetAllPoints(root)
+    background:SetColorTexture(0.015, 0.018, 0.024, 0.88)
+
+    local dragHandle = CreateFrame("Frame", nil, root)
+    dragHandle:SetPoint("TOPLEFT", root, "TOPLEFT", 0, 0)
+    dragHandle:SetPoint("TOPRIGHT", root, "TOPRIGHT", 0, 0)
+    dragHandle:SetHeight(HANDLE_HEIGHT)
+    dragHandle:RegisterForDrag("LeftButton")
+    dragHandle:SetScript("OnDragStart", function()
+        if addon.db.locked or InCombatLockdown() then
+            return
+        end
+        root:StartMoving()
+    end)
+    dragHandle:SetScript("OnDragStop", function()
+        if InCombatLockdown() then
+            return
+        end
+        root:StopMovingOrSizing()
+        SavePosition(layoutKey, root)
+    end)
+
+    local handleBackground = dragHandle:CreateTexture(nil, "BACKGROUND")
+    handleBackground:SetAllPoints(dragHandle)
+    handleBackground:SetColorTexture(0.055, 0.065, 0.08, 0.94)
+
+    local title = dragHandle:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    title:SetPoint("CENTER", dragHandle, "CENTER", 0, 0)
+
+    local frameInfo = {
+        root = root,
+        dragHandle = dragHandle,
+        title = title,
+        titleBase = titleBase,
+    }
+    addon.frames[layoutKey] = frameInfo
+
+    if RegisterStateDriver then
+        RegisterStateDriver(root, "visibility", visibilityDriver)
+    elseif layoutKey == "raid" then
+        root:SetShown(IsInRaid and IsInRaid())
+    else
+        root:SetShown(not (IsInRaid and IsInRaid()))
+    end
+
+    return frameInfo
+end
+
+local function AddUnitButton(root, definition, buttonSize, filterString, showDuration)
+    local button = addon.SecureButtons:Create(
+        root,
+        definition.name,
+        definition.unit,
+        definition.label,
+        buttonSize
+    )
+    addon.buttons[#addon.buttons + 1] = button
+
+    local container, auraError = addon.AuraDisplay:Create(
+        button,
+        definition.unit,
+        filterString,
+        {
+            size = buttonSize,
+            showDuration = showDuration,
+        }
+    )
+    if container then
+        addon.auraContainers[#addon.auraContainers + 1] = container
+    else
+        addon.auraError = addon.auraError or tostring(auraError)
+    end
+
+    return button
+end
+
+local function CreatePartyUI(filterString)
+    local definitions = {
+        { unit = "player", name = "SimpleDispelPlayerButton", label = "YOU" },
+        { unit = "party1", name = "SimpleDispelParty1Button", label = "P1" },
+        { unit = "party2", name = "SimpleDispelParty2Button", label = "P2" },
+        { unit = "party3", name = "SimpleDispelParty3Button", label = "P3" },
+        { unit = "party4", name = "SimpleDispelParty4Button", label = "P4" },
+    }
+    local width = (PARTY_BUTTON_SIZE * #definitions)
+        + (PARTY_GAP * (#definitions - 1))
+        + (FRAME_PADDING * 2)
+    local height = PARTY_BUTTON_SIZE + HANDLE_HEIGHT + (FRAME_PADDING * 2)
+    local frameInfo = CreateRoot(
+        "party",
+        "SimpleDispelPartyFrame",
+        "SimpleDispel Party",
+        width,
+        height,
+        "[group:raid] hide; show"
+    )
+
+    for index, definition in ipairs(definitions) do
+        local button = AddUnitButton(
+            frameInfo.root,
+            definition,
+            PARTY_BUTTON_SIZE,
+            filterString,
+            true
+        )
+        local x = FRAME_PADDING + ((index - 1) * (PARTY_BUTTON_SIZE + PARTY_GAP))
+        button:SetPoint("TOPLEFT", frameInfo.root, "TOPLEFT", x, -(HANDLE_HEIGHT + FRAME_PADDING))
+    end
+end
+
+local function CreateRaidUI(filterString)
+    local columns = 8
+    local rows = 5
+    local width = (RAID_BUTTON_SIZE * columns)
+        + (RAID_GAP * (columns - 1))
+        + (FRAME_PADDING * 2)
+    local height = (RAID_BUTTON_SIZE * rows)
+        + (RAID_GAP * (rows - 1))
+        + HANDLE_HEIGHT
+        + (FRAME_PADDING * 2)
+    local frameInfo = CreateRoot(
+        "raid",
+        "SimpleDispelRaidFrame",
+        "SimpleDispel Raid 1-40",
+        width,
+        height,
+        "[group:raid] show; hide"
+    )
+
+    for index = 1, 40 do
+        local definition = {
+            unit = "raid" .. index,
+            name = "SimpleDispelRaid" .. index .. "Button",
+            label = tostring(index),
+        }
+        local button = AddUnitButton(
+            frameInfo.root,
+            definition,
+            RAID_BUTTON_SIZE,
+            filterString,
+            false
+        )
+        local column = math.floor((index - 1) / rows)
+        local row = (index - 1) % rows
+        local x = FRAME_PADDING + (column * (RAID_BUTTON_SIZE + RAID_GAP))
+        local y = -(HANDLE_HEIGHT + FRAME_PADDING + (row * (RAID_BUTTON_SIZE + RAID_GAP)))
+        button:SetPoint("TOPLEFT", frameInfo.root, "TOPLEFT", x, y)
+    end
+end
+
+local function CreateUI()
+    local filterString = addon.AuraDisplay:GetFilter(addon.db.filterMode)
+    CreatePartyUI(filterString)
+    CreateRaidUI(filterString)
+    ApplyAllFrameSettings()
+
+    if addon.auraError then
+        Print("Aura display unavailable: " .. addon.auraError)
     end
 end
 
@@ -101,17 +369,25 @@ local function PrintStatus()
     local spell = addon.activeSpell
 
     Print(string.format(
-        "addon=%s game=%s build=%s toc=%s combat=%s",
+        "addon=%s game=%s build=%s toc=%s combat=%s mode=%s",
         GetAddonVersion(),
         tostring(gameVersion),
         tostring(build),
         tostring(tocVersion),
-        tostring(InCombatLockdown())
+        tostring(InCombatLockdown()),
+        GetActiveLayoutKey()
     ))
     Print(string.format(
-        "auraContainer=%s filter=%s",
+        "auraContainer=%s filter=%s containers=%d buttons=5+40 locked=%s",
         supported and "yes" or ("no: " .. tostring(supportError)),
-        addon.AuraDisplay:GetFilter(addon.db.filterMode)
+        addon.AuraDisplay:GetFilter(addon.db.filterMode),
+        #addon.auraContainers,
+        tostring(addon.db.locked)
+    ))
+    Print(string.format(
+        "partyScale=%.2f raidScale=%.2f",
+        addon.db.layouts.party.scale or 1,
+        addon.db.layouts.raid.scale or 1
     ))
 
     if spell then
@@ -135,6 +411,9 @@ local function PrintHelp()
     Print("/sd status")
     Print("/sd spell auto | /sd spell <spellID>")
     Print("/sd filter <" .. FILTER_HELP .. "> (then /reload)")
+    Print("/sd lock | /sd unlock")
+    Print("/sd scale <0.60-2.00> [party|raid]")
+    Print("/sd reset [party|raid|all]")
 end
 
 local function HandleSpellCommand(argument)
@@ -170,6 +449,71 @@ local function HandleFilterCommand(argument)
     Print("filter set to " .. addon.AuraDisplay.Filters[argument] .. "; run /reload to rebuild containers")
 end
 
+local function HandleLockCommand(locked)
+    addon.db.locked = locked
+    ApplyAllFrameSettings()
+    Print(locked and "party and raid frames locked" or "frames unlocked; drag the visible title bar to move")
+    if InCombatLockdown() then
+        Print("layout will update after combat")
+    end
+end
+
+local function ParseScaleArgument(argument)
+    local first, second = string.match(argument or "", "^(%S+)%s*(%S*)$")
+    local layoutKey = GetActiveLayoutKey()
+    local scale
+
+    if first == "party" or first == "raid" then
+        layoutKey = first
+        scale = tonumber(second)
+    else
+        scale = tonumber(first)
+        if second == "party" or second == "raid" then
+            layoutKey = second
+        elseif second ~= "" then
+            return nil, nil
+        end
+    end
+    return scale, layoutKey
+end
+
+local function HandleScaleCommand(argument)
+    local scale, layoutKey = ParseScaleArgument(argument)
+    if not scale or not layoutKey or scale < MIN_SCALE or scale > MAX_SCALE then
+        Print(string.format("usage: /sd scale <%.2f-%.2f> [party|raid]", MIN_SCALE, MAX_SCALE))
+        return
+    end
+
+    addon.db.layouts[layoutKey].scale = scale
+    ApplyFrameSettings(layoutKey)
+    Print(string.format("%s scale set to %.2f", layoutKey, scale))
+    if InCombatLockdown() then
+        Print("layout will update after combat")
+    end
+end
+
+local function ResetLayout(argument)
+    local layoutKey = argument ~= "" and argument or GetActiveLayoutKey()
+    if layoutKey ~= "party" and layoutKey ~= "raid" and layoutKey ~= "all" then
+        Print("usage: /sd reset [party|raid|all]")
+        return
+    end
+
+    if layoutKey == "all" then
+        addon.db.layouts.party = NewDefaultLayout("party")
+        addon.db.layouts.raid = NewDefaultLayout("raid")
+        ApplyAllFrameSettings()
+    else
+        addon.db.layouts[layoutKey] = NewDefaultLayout(layoutKey)
+        ApplyFrameSettings(layoutKey)
+    end
+
+    Print(layoutKey .. " position and scale reset")
+    if InCombatLockdown() then
+        Print("layout will update after combat")
+    end
+end
+
 local function HandleSlashCommand(message)
     local command, argument = string.match(message or "", "^%s*(%S*)%s*(.-)%s*$")
     command = string.lower(command or "")
@@ -181,6 +525,14 @@ local function HandleSlashCommand(message)
         HandleSpellCommand(argument)
     elseif command == "filter" then
         HandleFilterCommand(argument)
+    elseif command == "lock" then
+        HandleLockCommand(true)
+    elseif command == "unlock" then
+        HandleLockCommand(false)
+    elseif command == "scale" then
+        HandleScaleCommand(argument)
+    elseif command == "reset" then
+        ResetLayout(argument)
     else
         PrintHelp()
     end
@@ -204,7 +556,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         self:UnregisterEvent("ADDON_LOADED")
         InitializeDatabase()
         RegisterSlashCommands()
-        CreatePrototypeUI()
+        CreateUI()
 
         self:RegisterEvent("PLAYER_LOGIN")
         self:RegisterEvent("PLAYER_REGEN_ENABLED")
@@ -216,10 +568,15 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 
     if event == "PLAYER_LOGIN" then
         addon:RefreshSpell()
-        Print("v" .. GetAddonVersion() .. " loaded; use /sd status")
+        Print("v" .. GetAddonVersion() .. " loaded; party + raid ready; use /sd status")
     elseif event == "PLAYER_REGEN_ENABLED" then
         if addon.pendingSpellRefresh then
             addon:RefreshSpell()
+        end
+        if addon.pendingLayoutRefresh then
+            ApplyAllFrameSettings()
+        else
+            UpdateLockState()
         end
     elseif event == "PLAYER_SPECIALIZATION_CHANGED"
         or event == "SPELLS_CHANGED"

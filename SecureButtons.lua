@@ -4,6 +4,7 @@ local SecureButtons = {}
 addon.SecureButtons = SecureButtons
 
 local BUTTON_SIZE = 48
+SecureButtons.BUTTON_SIZE = BUTTON_SIZE
 
 local function AddBorder(frame)
     local function NewLine()
@@ -33,15 +34,23 @@ local function AddBorder(frame)
     right:SetWidth(1)
 end
 
-function SecureButtons:Create(parent, globalName, unit, shortLabel)
+function SecureButtons:Create(parent, globalName, unit, shortLabel, requestedSize)
+    local buttonSize = tonumber(requestedSize) or BUTTON_SIZE
     local button = CreateFrame("Button", globalName, parent, "SecureActionButtonTemplate")
-    button:SetSize(BUTTON_SIZE, BUTTON_SIZE)
-    button:RegisterForClicks("AnyUp")
+    button:SetSize(buttonSize, buttonSize)
+    button:RegisterForClicks("LeftButtonUp")
 
-    -- These attributes are static for the lifetime of the prototype button.
+    -- These attributes are static for the lifetime of the button.
     button:SetAttribute("unit", unit)
     button:SetAttribute("type1", nil)
     button:SetAttribute("spell1", nil)
+
+    -- Party/raid unit tokens are fixed and visibility is driven securely. This
+    -- lets group members appear or disappear during combat without insecure code
+    -- attempting to show or hide a protected action button.
+    if unit ~= "player" and RegisterStateDriver then
+        RegisterStateDriver(button, "visibility", "[@" .. unit .. ",exists] show; hide")
+    end
 
     local background = button:CreateTexture(nil, "BACKGROUND")
     background:SetAllPoints(button)
@@ -54,10 +63,6 @@ function SecureButtons:Create(parent, globalName, unit, shortLabel)
     local label = button:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     label:SetPoint("CENTER")
     label:SetText(shortLabel)
-
-    local unitLabel = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    unitLabel:SetPoint("BOTTOM", button, "TOP", 0, 3)
-    unitLabel:SetText(unit)
 
     AddBorder(button)
 

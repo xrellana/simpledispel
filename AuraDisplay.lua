@@ -3,7 +3,7 @@ local _, addon = ...
 local AuraDisplay = {}
 addon.AuraDisplay = AuraDisplay
 
-local AURA_SIZE = 48
+local DEFAULT_AURA_SIZE = 48
 
 AuraDisplay.Filters = {
     mine = "HARMFUL|RAID",
@@ -11,44 +11,49 @@ AuraDisplay.Filters = {
     all = "HARMFUL|DISPELLABLE",
 }
 
-local function InitializeAuraButton(auraButton)
-    -- AuraButton surface methods may become forbidden after this callback.
-    -- All setup is intentionally completed inside the initialization window.
-    auraButton:SetSize(AURA_SIZE, AURA_SIZE)
+local function CreateAuraButtonInitializer(auraSize, showDuration)
+    return function(auraButton)
+        -- AuraButton surface methods may become forbidden after this callback.
+        -- All setup is intentionally completed inside the initialization window.
+        auraButton:SetSize(auraSize, auraSize)
 
-    if auraButton.SetMouseClickEnabled then
-        pcall(auraButton.SetMouseClickEnabled, auraButton, false)
-    end
-    if auraButton.SetMouseMotionEnabled then
-        pcall(auraButton.SetMouseMotionEnabled, auraButton, true)
-    end
+        if auraButton.SetMouseClickEnabled then
+            pcall(auraButton.SetMouseClickEnabled, auraButton, false)
+        end
+        if auraButton.SetMouseMotionEnabled then
+            pcall(auraButton.SetMouseMotionEnabled, auraButton, true)
+        end
 
-    local icon = auraButton:CreateTexture(nil, "ARTWORK")
-    icon:SetAllPoints(auraButton)
-    icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+        local icon = auraButton:CreateTexture(nil, "ARTWORK")
+        icon:SetAllPoints(auraButton)
+        icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
 
-    local cooldown = CreateFrame("Cooldown", nil, auraButton, "CooldownFrameTemplate")
-    cooldown:SetAllPoints(auraButton)
-    cooldown:EnableMouse(false)
+        local cooldown = CreateFrame("Cooldown", nil, auraButton, "CooldownFrameTemplate")
+        cooldown:SetAllPoints(auraButton)
+        cooldown:EnableMouse(false)
 
-    local count = auraButton:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmallOutline")
-    count:SetPoint("BOTTOMRIGHT", auraButton, "BOTTOMRIGHT", -2, 2)
+        local count = auraButton:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmallOutline")
+        count:SetPoint("BOTTOMRIGHT", auraButton, "BOTTOMRIGHT", -2, 2)
 
-    local duration = auraButton:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmallOutline")
-    duration:SetPoint("TOP", auraButton, "BOTTOM", 0, -2)
+        local duration
+        if showDuration then
+            duration = auraButton:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmallOutline")
+            duration:SetPoint("TOP", auraButton, "BOTTOM", 0, -2)
+        end
 
-    auraButton:SetIcon(icon)
-    if auraButton.SetDurationCooldown then
-        pcall(auraButton.SetDurationCooldown, auraButton, cooldown)
-    end
+        auraButton:SetIcon(icon)
+        if auraButton.SetDurationCooldown then
+            pcall(auraButton.SetDurationCooldown, auraButton, cooldown)
+        end
 
-    if auraButton.SetApplicationCount then
-        pcall(auraButton.SetApplicationCount, auraButton, count, {})
-    end
-    if auraButton.SetDurationText then
-        -- Duration option schemas changed several times during 12.1 PTR.
-        -- A rejected optional binding must not abort the icon-only display.
-        pcall(auraButton.SetDurationText, auraButton, duration, {})
+        if auraButton.SetApplicationCount then
+            pcall(auraButton.SetApplicationCount, auraButton, count, {})
+        end
+        if duration and auraButton.SetDurationText then
+            -- Duration option schemas changed several times during 12.1 PTR.
+            -- A rejected optional binding must not abort the icon-only display.
+            pcall(auraButton.SetDurationText, auraButton, duration, {})
+        end
     end
 end
 
@@ -69,11 +74,15 @@ function AuraDisplay:GetFilter(mode)
     return self.Filters[mode] or self.Filters.mine
 end
 
-function AuraDisplay:Create(owner, unit, filterString)
+function AuraDisplay:Create(owner, unit, filterString, options)
     local supported, supportError = self:IsSupported()
     if not supported then
         return nil, supportError
     end
+
+    options = options or {}
+    local auraSize = tonumber(options.size) or DEFAULT_AURA_SIZE
+    local showDuration = options.showDuration ~= false
 
     local ok, container = pcall(
         CreateFrame,
@@ -90,7 +99,7 @@ function AuraDisplay:Create(owner, unit, filterString)
     container:SetPoint("CENTER", owner, "CENTER")
 
     local slotOK, auraButton = pcall(container.AddAuraSlot, container, "dispel", filterString, {
-        initializeFrame = InitializeAuraButton,
+        initializeFrame = CreateAuraButtonInitializer(auraSize, showDuration),
     })
     if not slotOK then
         container:Hide()
