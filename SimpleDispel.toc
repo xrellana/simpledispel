@@ -1,0 +1,11 @@
+## Interface: 120100
+## Title: SimpleDispel
+## Notes: Minimal secure click-to-dispel prototype for Retail 12.1+
+## Author: SimpleDispel contributors
+## Version: 0.1.0-alpha.1
+## SavedVariables: SimpleDispelDB
+
+DispelSpells.lua
+SecureButtons.lua
+AuraDisplay.lua
+Core.lua

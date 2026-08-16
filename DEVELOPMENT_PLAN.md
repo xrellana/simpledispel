@@ -9,8 +9,8 @@
 - 文档版本：0.1
 - 建立日期：2026-08-16
 - 目标客户端：World of Warcraft Retail 12.1，TOC Interface `120100`
-- 当前仓库状态：只有 README 和许可证，尚未开始插件代码
-- 当前开发阶段：阶段 1，12.1 技术验证
+- 当前仓库状态：阶段 1 原型代码已建立，尚未完成游戏内验收
+- 当前开发阶段：阶段 1，原型已实现，等待游戏内验证
 
 状态标记：
 
@@ -173,36 +173,36 @@ Aura API 的版本变化必须尽量封装在 `AuraDisplay.lua`，避免扩散�
 
 ### 阶段 1：12.1 技术验证
 
-状态：`[ ]`
+状态：`[-]`
 
 目标：只验证项目最关键的两个能力，不提前实现完整插件。
 
 #### 任务 1.1：最小插件骨架
 
-- [ ] 创建 `SimpleDispel.toc`，Interface 设置为 `120100`。
-- [ ] 创建最小 `Core.lua`。
-- [ ] 登录时输出一次版本和加载成功信息。
+- [x] 创建 `SimpleDispel.toc`，Interface 设置为 `120100`。
+- [x] 创建最小 `Core.lua`。
+- [-] 登录时输出一次版本和加载成功信息，等待正式服验证。
 - [ ] 确认 `/reload` 无 Lua 错误。
 
 #### 任务 1.2：安全点击验证
 
-- [ ] 创建 `player` 安全按钮。
-- [ ] 创建 `party1` 安全按钮。
-- [ ] 给按钮设置固定 unit token。
-- [ ] 脱战时设置左键驱散技能。
+- [x] 创建 `player` 安全按钮。
+- [x] 创建 `party1` 安全按钮。
+- [x] 给按钮设置固定 unit token。
+- [x] 脱战时设置左键驱散技能。
 - [ ] 验证战斗中点击能对固定 unit 施法。
 - [ ] 验证不改变当前目标。
 - [ ] 验证射程外、目标死亡和技能冷却时只是正常施法失败。
 
 #### 任务 1.3：Aura Container 验证
 
-- [ ] 检测客户端是否提供 `CustomAuraContainerTemplate` 和所需方法。
-- [ ] 分别给 `player`、`party1` 创建 Aura Container。
-- [ ] 首先测试 `HARMFUL|RAID`。
-- [ ] 对比 `RAID_PLAYER_DISPELLABLE` 和 `DISPELLABLE` 的实际显示结果。
-- [ ] 将最大显示数量限制为 1。
-- [ ] 初始化图标、驱散边框、持续时间和 tooltip。
-- [ ] 验证 secret aura 状态下不读取 Aura Button 状态。
+- [x] 检测客户端是否提供 `CustomAuraContainerTemplate` 和所需方法。
+- [-] 已实现给 `player`、`party1` 创建 Aura Container，等待正式服验证。
+- [x] 首先测试 `HARMFUL|RAID`。
+- [-] 对比 `RAID_PLAYER_DISPELLABLE` 和 `DISPELLABLE` 的实际显示结果。
+- [x] 将最大显示数量限制为 1。
+- [-] 初始化图标、冷却、层数、持续时间和 tooltip；驱散类型边框留待实测后接入。
+- [x] 代码不读取 Aura Button 的显示、隐藏、数量或 aura payload。
 
 #### 任务 1.4：显示和点击组合验证
 
@@ -447,4 +447,4 @@ Taint：无 / 有
 
 ## 9. 下一步
 
-下一步只执行阶段 1：创建最小插件骨架，验证 `player` 和 `party1` 的 Aura Container 与安全点击组合。在阶段 1 通过之前，不实现团队布局、完整设置或高级功能。
+阶段 1 原型已经实现。下一步按照 `STAGE1_TESTING.md` 在正式服验证 `player` 和 `party1` 的 Aura Container 与安全点击组合；在阶段 1 通过之前，不实现团队布局、完整设置或高级功能。
