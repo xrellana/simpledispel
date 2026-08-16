@@ -17,7 +17,24 @@ local function CreateAuraButtonInitializer(auraSize, showDuration)
         -- All setup is intentionally completed inside the initialization window.
         auraButton:SetSize(auraSize, auraSize)
 
-        if auraButton.SetMouseClickEnabled then
+        -- AuraButton is visually above the secure unit button. Disabling its
+        -- click handling does not guarantee that the event reaches the frame
+        -- below it. Explicit click propagation keeps the native aura tooltip
+        -- while forwarding LeftButton down/up to the secure action button.
+        local clickPropagationEnabled = false
+        if auraButton.SetMouseClickEnabled and auraButton.SetPropagateMouseClicks then
+            local clickOK = pcall(auraButton.SetMouseClickEnabled, auraButton, true)
+            local propagationOK = pcall(auraButton.SetPropagateMouseClicks, auraButton, true)
+            clickPropagationEnabled = clickOK and propagationOK
+        end
+        if not clickPropagationEnabled and auraButton.SetPassThroughButtons then
+            clickPropagationEnabled = pcall(
+                auraButton.SetPassThroughButtons,
+                auraButton,
+                "LeftButton"
+            )
+        end
+        if not clickPropagationEnabled and auraButton.SetMouseClickEnabled then
             pcall(auraButton.SetMouseClickEnabled, auraButton, false)
         end
         if auraButton.SetMouseMotionEnabled then

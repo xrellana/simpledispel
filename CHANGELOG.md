@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.0-beta.2 — 2026-08-16
+
+- 修复 Aura 图标覆盖安全按钮时，点击图标不能触发驱散的问题。
+- 在 Aura Button 初始化窗口内启用原生鼠标点击传播，保留图标、倒计时和 tooltip。
+- 保留 `SetPassThroughButtons("LeftButton")` 作为客户端兼容降级路径。
+
 ## 0.10.0-beta.1 — 2026-08-16
 
 - 新增独立 Raid 模式，预创建固定 `raid1`–`raid40` 安全按钮。

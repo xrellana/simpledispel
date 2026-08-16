@@ -1,4 +1,4 @@
-# SimpleDispel 0.10.0-beta.1 Party/Raid 实测
+# SimpleDispel 0.10.0-beta.2 Party/Raid 实测
 
 这个版本具备五人小队和最多 40 人团队的基本路径，但尚未经过 WoW 12.1 正式服完整战斗验证。第一次建议使用普通/英雄地下城、随机团队或不重要的普通团队，不要直接用于高层钥匙或开荒关键场次。
 
@@ -23,7 +23,7 @@
 
 正常结果应包含：
 
-- `addon=0.10.0-beta.1`
+- `addon=0.10.0-beta.2`
 - 单人/小队时 `mode=party`，团队中 `mode=raid`
 - `auraContainer=yes`
 - `containers=45`
