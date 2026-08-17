@@ -1,457 +1,193 @@
-# SimpleDispel 阶段开发文档
+# SimpleDispel 当前开发状态与后续计划
 
-> 目标：为 World of Warcraft Retail 12.1+ 开发一个极简、合规、可维护的点击驱散插件。
->
-> 本文档既是需求说明，也是开发清单、阶段门禁和测试记录。后续开发按阶段推进；如果功能受到 12.1 API 的硬限制，则记录结论并停止该功能，不使用漏洞、污染或规避机制实现。
+## 1. 审计结论
 
-## 1. 文档状态
+- **审计日期：** 2026-08-17
+- **审计基准：** 当前 `HEAD`；插件版本 `0.10.0-beta.5`；Retail `Interface: 120100`
+- **当前判断：** Party/Raid 的主要代码路径已经实现，并有离线 mock 测试覆盖结构和初始化逻辑；但安全点击、正式服战斗行为、taint/Forbidden、Raid 性能和职业/专精覆盖尚未完成正式服验收。因此当前仍是 beta，不应依赖于高层钥匙、开荒或其他重要内容。
 
-- 文档版本：0.2
-- 建立日期：2026-08-16
-- 目标客户端：World of Warcraft Retail 12.1，TOC Interface `120100`
-- 当前仓库状态：Party/Raid beta 已实现，尚未完成 12.1 正式服游戏内验收
-- 当前开发阶段：阶段 1、2、4 合并实测；按照 `BETA_TESTING.md` 完成地下城与团队关键验证
+本文是面向 review 的状态记录，不把“源码存在”误写成“正式服已验证”。每项能力使用以下状态：
 
-状态标记：
-
-- `[ ]` 尚未开始
-- `[-]` 进行中
-- `[x]` 已完成并通过验收
-- `[!]` 被 API 或客户端行为阻塞，停止该项
-
-## 2. 产品定义
-
-### 2.1 “一键驱散”的定义
-
-本项目中的“一键驱散”指：
-
-1. 插件显示自己、小队或团队成员的固定小方块。
-2. 暴雪允许显示的可驱散效果出现在对应成员方块上。
-3. 玩家点击该成员方块，安全按钮直接对该成员施放驱散技能。
-4. 施法不需要玩家先切换当前目标。
-
-本项目不实现：
-
-- 一个全局按键自动选择应该驱散的成员。
-- 自动判断 debuff 危险程度或驱散优先级。
-- 自动选择目标、自动选择技能或自动施法。
-- 通过读取、比较或推导 secret aura 数据恢复被暴雪禁止的判断逻辑。
-
-### 2.2 MVP 范围
-
-- Retail 12.1+，暂不支持 Classic 系列客户端。
-- 支持 `player`、`party1` 至 `party4`。
-- 技术稳定后扩展到 `raid1` 至 `raid40`。
-- 左键施放当前专精可用的友方驱散技能。
-- 显示最多一个或两个系统过滤后的可驱散 debuff。
-- 使用 12.1 Aura Container/Aura Button 显示 aura。
-- 使用安全单位按钮执行玩家点击触发的施法。
-- 支持移动、锁定、缩放和基础布局设置。
-- 不改变当前目标。
-- 不依赖 Ace3 等第三方运行库。
-
-### 2.3 非 MVP 功能
-
-以下功能在 MVP 稳定后单独评估，不应影响第一版交付：
-
-- 敌方净化、偷取魔法、宁神射击、安抚等进攻性驱散。
-- 精神控制或魅惑的特殊处理。
-- 多鼠标按键映射不同技能。
-- 自定义声音。
-- debuff 黑名单、白名单和副本数据库。
-- 完整图形设置面板。
-- CurseForge、Wago 等平台自动发布。
-
-## 3. 12.1 API 边界
-
-### 3.1 已确认的设计边界
-
-暴雪在 Midnight 中将部分战斗信息变为 secret value：插件可以按照允许的方式显示信息，但不能读取并利用其内容做战斗决策。12.1 又为 aura 显示引入 Aura Container，让插件定制显示经过系统过滤的 aura，而不暴露底层数据。
-
-参考资料：
-
-- [Combat Philosophy and Addon Disarmament in Midnight](https://news.blizzard.com/en-us/article/24246290/combat-philosophy-and-addon-disarmament-in-midnight)
-- [Addons and Auras in Curse of Ula’tek](https://us.forums.blizzard.com/en/wow/t/addons-and-auras-in-curse-of-ula%E2%80%99tek/2317456/)
-- [Curse of Ula’tek 12.1 发布信息](https://worldofwarcraft.blizzard.com/en-gb/news/24294370)
-
-开发时按以下原则处理：
-
-- 不依赖在战斗中枚举 `UnitAura` 返回值。
-- 不依赖 `UNIT_AURA` payload 执行自定义判断。
-- 不读取 Aura Button 的显示状态来反推出某人是否中了 debuff。
-- 不给受限制的 Aura Button 安装用于推导 aura 状态的脚本。
-- 不在战斗中修改受保护按钮的施法或单位属性。
-- 不使用 taint、hook、子框架事件或其他方式绕过 Forbidden Aspect。
-
-### 3.2 硬限制停止规则
-
-出现以下情况时，停止对应功能并在本文档的“决策记录”中登记：
-
-1. 只有读取 secret value、比较 secret value 或触发 Lua 错误才能实现。
-2. 需要监控 Aura Button 的 `OnShow`、`OnHide`、尺寸或其他受限状态来实现。
-3. 需要污染安全执行路径或在战斗中修改 protected attribute。
-4. 需要使用暴雪显然准备封堵的 API 漏洞或时序漏洞。
-5. 功能只在脱战时正确、进入战斗即失效，而其产品目标本身是战斗内使用。
-6. 功能导致 `ADDON_ACTION_FORBIDDEN`、taint、secret-object 或 forbidden-frame 错误，且没有官方支持的实现路径。
-
-允许的降级方案：
-
-- aura 图标不能直接接收安全点击时，图标只负责显示，旁边或底层固定方块负责点击。
-- 无法自动识别驱散技能时，允许玩家在脱战状态手动选择已学会的技能。
-- 无法只显示“自己能驱散”的效果时，可以评估显示“所有可驱散效果”，但必须明确标记，且默认不得误导用户。
-- 团队模式受限但五人模式可用时，可以只发布五人版。
-
-不允许的降级方案：
-
-- 尝试从 tooltip、布局变化、帧数量、声音或耗时侧信道恢复 aura 内容。
-- 用战斗日志重建并自动判断驱散目标。
-- 使用外部程序、注入、自动点击或键鼠模拟。
-
-## 4. 目标架构
-
-```text
-固定 unit token
-      │
-      ├── AuraDisplay
-      │     12.1 AuraContainer
-      │     只显示系统过滤后的 aura
-      │
-      └── SecureButtons
-            固定 unit + 固定 spell
-                    │
-                玩家点击
-                    │
-                    └── 对该 unit 施放驱散
-```
-
-计划文件结构：
-
-```text
-SimpleDispel/
-├── SimpleDispel.toc
-├── Core.lua
-├── DispelSpells.lua
-├── SecureButtons.lua
-├── AuraDisplay.lua
-├── Layout.lua
-├── Options.lua
-├── Locale.lua
-├── README.md
-├── DEVELOPMENT_PLAN.md
-└── CHANGELOG.md
-```
-
-模块职责：
-
-| 模块 | 职责 |
+| 状态 | 含义 |
 |---|---|
-| `Core.lua` | 初始化、事件注册、模块协调、战斗状态队列 |
-| `DispelSpells.lua` | 候选驱散技能、spellbook 检测、专精和天赋变化 |
-| `SecureButtons.lua` | 安全单位按钮、点击属性、受保护状态更新 |
-| `AuraDisplay.lua` | 12.1 Aura Container 创建、过滤和外观初始化 |
-| `Layout.lua` | 单人、小队、团队布局和显示切换 |
-| `Options.lua` | SavedVariables、斜杠命令和基础设置 |
-| `Locale.lua` | 简体中文、繁体中文和英文 UI 文本 |
+| **代码已实现** | 当前源码包含可执行实现；不等于已通过正式服验收。 |
+| **mock 已覆盖** | 离线 mock 测试覆盖了指定结构或分支；不等于真实 WoW API 行为成立。 |
+| **正式服待验证** | 代码路径已存在，但需要在 Retail 12.1 实际客户端、战斗或团队环境确认。 |
+| **尚未实现/暂不做** | 当前没有实现，或明确不属于本阶段范围。 |
+
+当前没有发现 Lua 源码中的 `TODO`、`FIXME` 或明显空函数/stub；未完成内容主要是正式服验证、功能范围和质量门禁，而不是隐藏的代码占位符。
+
+## 2. 项目目标与明确边界
+
+SimpleDispel 的“一键驱散”是：插件为固定 unit token 创建成员方块；客户端的 Aura Container 显示系统过滤后的效果；玩家点击对应方块；安全按钮对该固定 unit 施放当前配置的友方驱散技能；过程中不需要切换当前目标。
+
+项目不实现：
+
+- 自动选择应该驱散的成员、自动排序驱散优先级或自动施法；
+- 读取、比较、推导或通过侧信道恢复 secret aura 数据；
+- 战斗日志驱动的自动目标判断、自动点击、输入模拟或外部程序；
+- Classic 客户端支持；本项目目标是 Retail 12.1+。
+
+## 3. 12.1 API 安全边界
+
+实现必须遵守以下边界：
+
+- Aura 只通过 `CustomAuraContainerTemplate` 和系统过滤器显示；不枚举、比较或解析受限 aura payload。
+- 不使用 `UNIT_AURA` payload、Aura Button 的显示/隐藏/尺寸变化、tooltip、帧数量、声音、耗时或布局变化推导战斗信息。
+- 每个安全按钮永久绑定固定 unit token；protected attribute 只在脱战时更新。
+- Party/Raid 成员显示和布局变化使用安全状态驱动；战斗中的非安全更新进入脱战队列。
+- 若官方 API 不支持某项功能，应停止该项或记录降级，不使用 taint、hook、时序漏洞或污染安全路径绕过限制。
 
-Aura API 的版本变化必须尽量封装在 `AuraDisplay.lua`，避免扩散到其他模块。
+## 4. 当前实际文件结构
 
-## 5. 开发阶段
+| 文件 | 当前职责 |
+|---|---|
+| `SimpleDispel.toc` | Retail 12.1 manifest、版本、SavedVariables 和加载顺序。 |
+| `Core.lua` | 初始化、SavedVariables 迁移、Party/Raid 根框架、布局、事件、斜杠命令和模块协调。 |
+| `DispelSpells.lua` | 各职业候选技能、spellbook/已知技能检测和自动解析。 |
+| `SecureButtons.lua` | `SecureActionButtonTemplate`、固定 unit、点击注册、spell attribute 和安全可见性。 |
+| `AuraDisplay.lua` | Aura Container、过滤器、单个 aura slot、图标/cooldown/count/duration 初始化和点击传播。 |
+| `tests/test.lua` | Core 的 mock runtime 测试。 |
+| `tests/secure_button_test.lua` | 安全按钮的 mock API 测试。 |
+| `tests/aura_input_test.lua` | Aura Button 初始化和鼠标传播的 mock API 测试。 |
+| `.github/workflows/release.yml` | 校验 TOC 版本、打包 Lua/TOC 并创建 GitHub release。 |
 
-### 阶段 0：需求与边界确认
+当前不存在计划早期列出的 `Layout.lua`、`Options.lua`、`Locale.lua`；对应布局、SavedVariables/命令功能暂时集中在 `Core.lua`。未来可以拆分，但这不是当前 beta 的已交付文件。
 
-状态：`[x]`
+## 5. 已实现能力与证据
 
-完成项：
+| 能力 | 状态 | 代码证据 | review 说明 |
+|---|---|---|---|
+| Manifest、版本和 SavedVariables | 代码已实现 | `SimpleDispel.toc:1-11` | 当前版本为 `0.10.0-beta.5`。加载是否无 Lua 错误仍需游戏内确认。 |
+| Party 五个固定 slot | 代码已实现；mock 已覆盖 | `Core.lua:305-337`；`tests/test.lua:223-231` | 固定为 `player`、`party1`-`party4`。 |
+| Raid 四十个固定 slot | 代码已实现；mock 已覆盖 | `Core.lua:370-408`；`tests/test.lua:223-231` | 固定为 `raid1`-`raid40`，不动态重排。 |
+| Party/Raid 安全显示切换 | 代码已实现；mock 已覆盖 | `Core.lua:230-236`、`SecureButtons.lua:53-58`；`tests/test.lua:249-261` | 具体客户端 protected frame 行为仍待验证。 |
+| Raid 五列及按人数调整行数 | 代码已实现；mock 已覆盖 | `Core.lua:339-368,402-406`；`tests/test.lua:270-301` | 10/20/25/30/40 人的高度有 mock 断言。 |
+| 成员名称显示 | 代码已实现；mock 已覆盖 | `Core.lua:276-303`；`tests/test.lua:232-240` | 名称只交给 FontString，不能用于排序或战斗决策。 |
+| 每个单位一个 Aura Container | 代码已实现；mock 已覆盖 | `AuraDisplay.lua:104-164`；`Core.lua:241-273`；`tests/test.lua:232` | 当前创建 45 个容器。 |
+| 系统过滤 aura、图标、cooldown、层数、可选持续时间 | 代码已实现；仅部分初始化由 mock 覆盖 | `AuraDisplay.lua:8-12,14-84`；`tests/aura_input_test.lua:111-137` | mock 只覆盖部分初始化调用；过滤器实际语义、tooltip、驱散类型边框和真实客户端显示仍待正式服确认。 |
+| Aura 图标左键传播降级路径 | 代码已实现；`SetPropagateMouseClicks` 成功路径 mock 已覆盖 | `AuraDisplay.lua:20-40`；`tests/aura_input_test.lua:122-126` | `SetPassThroughButtons` fallback 未覆盖；能否在真实受保护 Aura Button 上稳定传到安全按钮仍是 P0。 |
+| 固定 unit 的安全施法按钮 | 代码已实现；mock 已覆盖 | `SecureButtons.lua:37-57,99-119`；`tests/secure_button_test.lua:96-145` | 只证明属性和注册方式，不证明战斗内施法成功。 |
+| 左键按下/抬起及 `useOnKeyDown=false` | 代码已实现；mock 已覆盖 | `SecureButtons.lua:42-50`；`tests/secure_button_test.lua:104-108` | 用于避免依赖账号级 `ActionButtonUseKeyDown`。 |
+| 自动候选技能解析 | 代码已实现 | `DispelSpells.lua:8-16,18-107` | 按职业候选顺序检查已知 spell；尚无每职业/专精正式服验证。 |
+| 专精、技能和天赋变化触发刷新 | 代码已实现 | `Core.lua:633-670` | 当前只是重新运行职业候选列表，并未实现真正的专精/天赋条件逻辑。 |
+| 手动 spell ID override | 代码已实现 | `Core.lua:491-512`；`DispelSpells.lua:80-87` | 已知风险：只确认客户端能取得 spell 信息，不强制确认角色已学会该 spell。 |
+| SavedVariables、旧版迁移和 Party/Raid 独立缩放 | 代码已实现；mock 已覆盖 | `Core.lua:78-107,149-183`；`tests/test.lua:219-222,267-301` | schema 当前为 3。 |
+| 锁定、解锁、拖动、重置和战斗延迟 | 代码已实现；部分 mock 已覆盖 | `Core.lua:116-183,524-587`；`tests/test.lua:286-301` | 战斗内实际 protected 行为仍需验证。 |
+| 诊断命令 `/sd status` | 代码已实现 | `Core.lua:438-480` | 可输出版本、Build、模式、容器数、过滤器和技能信息。 |
+| 过滤器、缩放、重置和 spell 命令 | 代码已实现；部分 mock 已覆盖 | `Core.lua:482-610`；`tests/test.lua:267-288` | 修改 filter 后需要 `/reload` 重建容器。 |
+| Release 打包工作流 | 代码已实现 | `.github/workflows/release.yml:1-77` | 只打包 Lua/TOC 并发布；当前没有 test job。 |
 
-- [x] 将“一键”定义为点击对应成员方块施法。
-- [x] 排除自动选择成员和自动优先级。
-- [x] 确定 Retail 12.1 为第一目标。
-- [x] 确定遇到硬限制即停止对应功能。
-- [x] 确定第一版优先支持友方驱散和五人小队。
+## 6. Mock 测试覆盖与边界
 
-出口条件：本文档被接受为后续开发依据。
+已有测试覆盖：
 
-### 阶段 1：12.1 技术验证
+- `tests/test.lua`：SavedVariables 迁移、45 个按钮和容器的结构、名称、网格位置、visibility driver、Raid 高度、缩放/重置和战斗延迟。
+- `tests/secure_button_test.lua`：固定 unit、左右键注册、`useOnKeyDown`、spell attribute、Party/Raid visibility driver。
+- `tests/aura_input_test.lua`：Aura Button 尺寸、图标、cooldown、层数、持续时间、native mouse motion 和点击传播初始化。
 
-状态：`[-]`
+这些测试使用自建 API mock，不能证明真实客户端会接受 protected action，不能证明目标不变、点击图标一定成功，也不能发现真实 taint、`ADDON_ACTION_FORBIDDEN`、secret-value/forbidden-frame、战斗 roster 行为或 40 个容器的性能问题。`tests/test.lua` 还替换了 `SecureButtons`、`AuraDisplay` 和 `Spells`，因此不等于端到端集成测试。
 
-目标：只验证项目最关键的两个能力，不提前实现完整插件。
+本次审计环境未发现 Lua/LuaJIT 解释器，因此未执行这些测试；离线测试需要外部 Lua/LuaJIT 解释器，仓库不提供解释器。项目源码不依赖 Ace3 或其他第三方 addon 库。GitHub Actions 当前只有 release workflow，没有自动测试 job。
 
-#### 任务 1.1：最小插件骨架
+## 7. 正式服待验证项（P0/P1 验收门禁）
 
-- [x] 创建 `SimpleDispel.toc`，Interface 设置为 `120100`。
-- [x] 创建最小 `Core.lua`。
-- [-] 登录时输出一次版本和加载成功信息，等待正式服验证。
-- [ ] 确认 `/reload` 无 Lua 错误。
+以下事项不能从源码或 mock 推断为已完成：
 
-#### 任务 1.2：安全点击验证
+- `/reload` 和登录时无 Lua 错误，Aura Container 在目标 Retail 12.1 Build 上可用。
+- Party 中点击空白区域、Aura 图标中心和图标边缘，均只对被点击的固定 unit 施放技能。
+- 点击前后当前目标保持不变；射程外、死亡、冷却或无可驱散效果时只产生正常施法失败。
+- Aura 出现、消失、倒计时、层数、tooltip、过滤器结果和图标点击传播符合预期。
+- 战斗中加入、离开、掉线、死亡、复活、换队和 roster 变化不产生 protected/forbidden 错误；脱战后延迟更新能够恢复。
+- 没有 `ADDON_ACTION_FORBIDDEN`、secret-value、forbidden-frame、blocked-action 或 taint 记录。
+- 10/20/25/30/40 人团队均能正确显示固定 `raidN` 对应成员，不误点其他成员。
+- 40 个 Aura Container 在至少 30 分钟真实团队场景中没有明显卡顿、异常内存增长或不可接受的帧创建/布局开销。
+- 每个声明支持的职业、专精和实际天赋组合至少完成一次真实可驱散效果测试；未测试组合不得写成已支持。
 
-- [x] 创建 `player` 安全按钮。
-- [x] 创建 `party1` 安全按钮。
-- [x] 给按钮设置固定 unit token。
-- [x] 脱战时设置左键驱散技能。
-- [ ] 验证战斗中点击能对固定 unit 施法。
-- [ ] 验证不改变当前目标。
-- [ ] 验证射程外、目标死亡和技能冷却时只是正常施法失败。
+正式服测试应记录客户端 Build、职业/专精、场景、过滤器、spell、完整 `/sd status`、Lua 错误、taint 和实际点击结果。`BETA_TESTING.md` 是执行步骤和回报模板，不是已经通过的测试结果。
 
-#### 任务 1.3：Aura Container 验证
+## 8. 尚未实现、已知风险与暂不做
 
-- [x] 检测客户端是否提供 `CustomAuraContainerTemplate` 和所需方法。
-- [-] 已为 Party/Raid 全部固定单位创建 Aura Container；正式服地下城已确认图标与倒计时显示，团队仍待验证。
-- [x] 首先测试 `HARMFUL|RAID`。
-- [-] 对比 `RAID_PLAYER_DISPELLABLE` 和 `DISPELLABLE` 的实际显示结果。
-- [x] 将最大显示数量限制为 1。
-- [-] 初始化图标、冷却、层数、持续时间和 tooltip；正式服已确认图标与倒计时，tooltip 与驱散类型边框仍待完整验证。
-- [x] 代码不读取 Aura Button 的显示、隐藏、数量或 aura payload。
+### 尚未实现或仍需代码工作
 
-#### 任务 1.4：显示和点击组合验证
+- 真正按专精/天赋条件筛选和验证候选驱散技能；当前仅按职业候选表和 spellbook 已知状态选择。
+- 简体中文、繁体中文和英文的 locale 系统；当前没有 `Locale.lua`，命令文本主要直接写在 `Core.lua`。
+- 可配置方块大小、间距、每行数量、横向/纵向增长方向。
+- 不依赖真实 aura 的布局测试模式。
+- 完整设置 GUI；MVP 阶段暂不做，斜杠命令足够完成当前基础设置。
+- 自动构建后的 mock 测试 job；当前 release workflow 不执行测试。
 
-- [-] `beta.1` 图标点击未触发；`beta.2` 加入传播后空方块仍未观察到施法；`beta.3` 已固定 SecureActionButton 按下/抬起时机，等待复测。
-- [-] 已确认仅关闭 Aura Button 点击不能可靠传给父按钮；优先采用 `SetPropagateMouseClicks(true)`，失败时降级为 `SetPassThroughButtons("LeftButton")`。
-- [ ] 验证容器不会污染安全按钮。
-- [ ] 验证战斗中 aura 出现和消失时没有 Lua 错误。
+### 已知风险
 
-#### 阶段 1 验收
+- `/sd spell <spellID>` 不强制验证角色已学会该 spell；误设未知或不可用技能可能导致按钮不可施法。
+- 每个单位只显示一个系统过滤后的 `dispel` slot；过滤器具体结果由客户端决定，插件不解析 aura。
+- Raid roster 在战斗中变化时，外框高度可能暂时保持旧值，计划在脱战后更新。
+- Raid 使用固定 `raid1`-`raid40` 顺序，名字只是显示用途，不保证按姓名、职业或职责排序。
+- 45 个 Aura Container 的真实性能和 taint 尚无证据。
 
-以下条件必须全部成立：
+### 明确暂不做
 
-- [x] 战斗中已显示系统过滤后的可驱散效果及倒计时。
-- [ ] 玩家一次点击能对对应成员施放驱散。
-- [ ] 不改变当前目标。
-- [ ] 没有 `ADDON_ACTION_FORBIDDEN`。
-- [ ] 没有 secret-value 或 forbidden-frame Lua 错误。
-- [ ] 没有相关 taint 记录。
+- 自动驱散优先级、自动选择成员、自动施法或输入模拟。
+- 敌方净化/偷取、宁神/安抚、声音、黑白名单、副本数据库和 Classic 支持。
 
-阶段结论：
+## 9. 重新排序的后续里程碑
 
-- [ ] 通过，进入阶段 2。
-- [ ] 通过降级方案进入阶段 2，降级内容已记录。
-- [ ] 受到硬限制，停止项目或重新定义产品目标。
+### P0：正式服安全点击门禁
 
-### 阶段 2：五人小队 MVP
+**工作：** 使用 Retail 12.1 实际客户端完成单人、五人和至少一个团队规模的低风险测试；重点验证空白方块、Aura 图标、正确 unit、当前目标、战斗状态和错误日志。
 
-状态：`[-]`
+**验收标准：**
 
-入口条件：原计划要求阶段 1 先通过。由于测试条件有限，用户决定先完成五人 MVP，再将阶段 1 与阶段 2 合并到 beta 地下城实测；本调整不放宽任何 API 硬限制。
+- 每次点击只对显示方块固定绑定的 unit 施法；当前目标不改变；
+- Aura 显示/消失和图标点击传播在战斗中稳定；
+- roster 变化和脱战延迟更新可恢复；
+- 无 Lua、`ADDON_ACTION_FORBIDDEN`、secret/forbidden、blocked-action 或 taint 问题；
+- 记录完整测试结果，而不是只更新 checklist 状态。
 
-#### 任务 2.1：固定单位按钮
+若遇到 API 硬限制，停止该路径并记录降级方案；不得通过 secret 数据推导、taint 或侧信道绕过。
 
-- [x] 预创建 `player`、`party1` 至 `party4`。
-- [x] 每个 unit token 永久绑定对应按钮，不根据 aura 换目标。
-- [x] 建立普通层与安全层的清晰父子关系。
-- [x] 战斗中禁止修改 protected attribute。
-- [x] 需要更新时标记 pending，并在 `PLAYER_REGEN_ENABLED` 后执行。
+### P1：职业覆盖与 Raid 可靠性
 
-#### 任务 2.2：驱散技能解析
+**工作：** 逐职业/专精/天赋验证候选技能和手动 override；完成 10/20/25/30/40 人 roster、死亡/掉线/加入/离开、Raid 点击绑定及性能测试。
 
-- [x] 建立职业和专精候选技能表。
-- [x] 从 spellbook 确认角色实际学会的技能。
-- [x] 使用客户端返回的本地化技能名称设置安全按钮。
-- [x] 监听 `SPELLS_CHANGED`。
-- [x] 监听专精和天赋变化。
-- [x] 当前角色没有友方驱散时显示不可用状态。
-- [x] 无法可靠自动识别时提供脱战手动选择作为降级方案。
-
-第一轮目标职业：
-
-- [ ] 德鲁伊
-- [ ] 唤魔师
-- [ ] 法师
-- [ ] 武僧
-- [ ] 圣骑士
-- [ ] 牧师
-- [ ] 萨满祭司
+**验收标准：**
 
-每个职业必须按“实际学会的技能”验证，不能只根据职业名假设技能存在。
+- README 只列出已经真实测试的职业/专精；
+- 自动选择和手动选择的行为、未学会技能风险有明确结果；
+- 各团队规模在战斗内外均无错误，30 分钟观察无明显卡顿或异常内存增长；
+- `/reload` 后 Party/Raid 位置、缩放和模式切换保持正确。
 
-#### 任务 2.3：Aura 显示
+### P2：易用性、本地化与工程质量
 
-- [x] 每个单位按钮拥有独立 Aura Container。
-- [x] 默认显示一个可驱散效果。
-- [ ] 使用系统提供的驱散类型边框或符号。
-- [x] 显示持续时间或原生冷却转圈。
-- [-] 鼠标悬停使用原生 Aura Button tooltip，等待正式服验证。
-- [x] 不监听 Aura Button 的显示、隐藏或尺寸变化。
-- [x] 不根据 aura 是否存在修改父按钮颜色、声音或布局。
-
-#### 任务 2.4：基础布局
-
-- [x] 单人状态只显示自己。
-- [x] 小队按固定顺序显示五个方块。
-- [x] 不存在的 `partyN` 通过 secure state driver 隐藏。
-- [x] 小队方块直接显示队员名字；secret name 仅交给 FontString 显示，不参与逻辑。
-- [x] `/sd unlock` 解锁拖动。
-- [x] `/sd lock` 锁定位置。
-- [x] `/sd reset` 恢复默认位置。
-- [x] `/sd scale 0.60-2.00` 调整整体缩放。
-
-#### 阶段 2 验收
-
-- [ ] 五人组队状态下布局正确。
-- [ ] 可驱散效果出现在正确成员位置。
-- [ ] 点击正确施放到对应成员。
-- [ ] 切换当前目标不会影响施法对象。
-- [ ] 战斗中小队状态变化不会产生 protected action 错误。
-- [ ] `/reload` 后位置和设置保留。
-- [ ] 完成一次完整地下城，无插件相关 Lua 或 taint 错误。
-
-交付物：`v0.9.0-beta.1`，代码完成，等待正式服地下城验收。
-
-### 阶段 3：职业、专精和本地化完善
-
-状态：`[ ]`
-
-入口条件：五人小队 MVP 能稳定完成实战。
-
-- [ ] 对目标职业逐一记录可用驱散技能和专精条件。
-- [ ] 验证天赋增加魔法驱散能力时能正确刷新。
-- [ ] 验证天赋移除或技能替换。
-- [ ] 验证战斗中切换配置的延迟更新行为。
-- [ ] 添加英文文本。
-- [ ] 添加简体中文文本。
-- [ ] 添加繁体中文文本。
-- [ ] 验证客户端本地化不会破坏安全施法属性。
-
-验收要求：每个声明支持的职业至少有一次真实 debuff 驱散测试。未测试职业不得在 README 中标记为已支持。
-
-交付物：`v0.1.0-beta`。
-
-### 阶段 4：团队模式
-
-状态：`[-]`
-
-原入口条件要求五人版本先稳定。用户决定先交付 Party/Raid 合并 beta，因此实现先行，40 个 Aura Container 的正式服性能仍是发布门禁。
-
-- [x] 预创建 `raid1` 至 `raid40` 安全按钮。
-- [x] 小队和团队使用不同的固定按钮集合。
-- [x] 使用 secure state driver 在 Party/Raid 间切换整体布局。
-- [x] 团队格直接显示成员名字，同时保持固定 raid index 顺序，不做动态排序。
-- [x] 固定 5 列，并按当前团队人数在脱战状态自动调整行数。
-- [ ] 支持每行数量设置。
-- [ ] 支持横向或纵向增长。
-- [-] 支持整体缩放；间距当前使用固定安全布局。
-- [ ] 记录 10、20、30、40 人时的 CPU 和内存表现。
-- [ ] 验证战斗中成员掉线、死亡、加入和离开。
-
-停止条件：
-
-- 40 个 Aura Container 导致明显卡顿且无法通过减少图标数量解决。
-- 团队 unit token 在战斗中的限制使按钮无法可靠工作。
-- 需要依据 secret 身份或角色信息动态重排才能保证正确性。
-
-如果团队模式停止，五人版仍可独立发布。
-
-### 阶段 5：设置与易用性
-
-状态：`[ ]`
-
-- [x] `SimpleDispelDB` SavedVariables，包含 schema version。
-- [ ] 方块大小。
-- [x] Party/Raid 独立整体缩放。
-- [ ] 间距和每行数量。
-- [ ] 横向、纵向增长。
-- [x] 小队和团队成员名字直接显示；暂不提供隐藏选项。
-- [x] 单人、小队、团队显示规则。
-- [x] 锁定、解锁、重置。
-- [ ] 不涉及真实 aura 的布局测试模式。
-- [x] `/sd status` 输出版本、模式、容器数量、当前技能和 API 能力检测结果。
-
-暂不做复杂设置 GUI；斜杠命令足够完成 MVP。
-
-### 阶段 6：质量验证与发布
-
-状态：`[ ]`
-
-#### 测试场景
-
-- [ ] 单人。
-- [ ] 五人普通地下城。
-- [ ] 英雄或史诗地下城。
-- [ ] M+。
-- [ ] 10 人以上团队。
-- [ ] PvP 或战场。
-- [ ] 战斗中加入、离开和掉线。
-- [ ] 死亡、释放灵魂和复活。
-- [ ] 切换专精、天赋和装备配置。
-- [ ] 已在队伍内时 `/reload`。
-- [ ] 简中、繁中和英文客户端。
-- [ ] 不同 UI Scale。
-
-#### 错误与性能检查
-
-- [ ] 启用 Lua 错误显示。
-- [ ] 检查 `ADDON_ACTION_FORBIDDEN`。
-- [ ] 检查 taint 日志。
-- [ ] 检查 secret-object/forbidden-frame 错误。
-- [ ] 检查 30 分钟以上实战内存增长。
-- [ ] 检查团队情况下的帧创建和布局耗时。
-
-#### 发布内容
-
-- [x] README 安装说明。
-- [x] 命令说明。
-- [ ] 支持职业和已验证专精列表。
-- [x] 已知限制。
-- [x] CHANGELOG。
-- [x] 版本号和 TOC metadata。
-- [x] 发布 ZIP 由 CI 根据源码构建；仓库不再提交 `dist/` 产物。
-
-## 6. 完成定义
-
-`v0.1.0` 必须满足：
-
-1. 插件正常加载，TOC 不过期。
-2. 五人方块正常排列。
-3. 当前角色的友方驱散技能能够被可靠识别或手动选择。
-4. 系统允许显示的可驱散效果出现在正确成员位置。
-5. 战斗中点击一次即可对对应成员施放驱散。
-6. 不切换当前目标。
-7. 不读取 secret aura 做战斗决策。
-8. 无 Lua、taint、secret-value、forbidden-frame 或 blocked-action 错误。
-9. 完成至少一次真实五人副本测试。
-10. README 明确描述功能边界和已知限制。
-
-## 7. 测试记录模板
-
-每次需要游戏内验证时，在阶段记录或 issue 中使用以下格式：
-
-```text
-日期：
-插件版本/提交：
-客户端版本与 Build：
-地区与语言：
-职业/专精：
-场景：单人 / 小队 / M+ / 团队 / PvP
-
-测试内容：
-1.
-2.
-
-预期结果：
-
-实际结果：
-
-Lua 错误：无 / 有，附完整堆栈
-ADDON_ACTION_FORBIDDEN：无 / 有
-Taint：无 / 有
-
-结论：通过 / 需要修改 / API 硬限制
-补充说明：
-```
-
-## 8. 决策记录
-
-| 日期 | 阶段 | 问题 | 证据 | 决定 |
-|---|---|---|---|---|
-| 2026-08-16 | 0 | 是否实现自动选择驱散目标 | Midnight 限制插件处理战斗状态与自动选择目标 | 不实现 |
-| 2026-08-16 | 0 | 12.1 aura 数据来源 | 暴雪要求使用过滤后的 Aura Container 显示 | 采用 Aura Container，不枚举 secret aura |
-| 2026-08-16 | 0 | 遇到 API 硬限制如何处理 | 用户明确要求不强行实现 | 停止对应功能并记录，不寻找绕过方式 |
-| 2026-08-16 | 1 | Aura 图标覆盖后点击未施法 | 地下城实测图标与倒计时正常，但点击未到达底层安全按钮 | 使用 12.1 原生鼠标点击传播；保留 LeftButton pass-through 降级 |
-| 2026-08-16 | 1 | 空方块点击未观察到施法 | 按钮只注册 `LeftButtonUp`，但 SecureActionButton 默认受 `ActionButtonUseKeyDown=1` 约束 | 同时注册按下/抬起并设置 `useOnKeyDown=false` |
-| 2026-08-17 | 4 | Raid 编号不便识别成员，固定 40 人外框在小团队中过大 | 固定 `raidN` 绑定不妨碍把名字直接交给 FontString 显示；团队人数可在脱战时安全调整外框 | 5 列固定 roster 顺序、直接显示名字、按人数调整行数；不做排序 |
-
-后续每个阶段的 API 差异、降级和停止决定都必须追加到此表。
-
-## 9. 下一步
-
-先用 `0.10.0-beta.5` 完成一次团队实测，验证姓名与固定 `raidN` 对应、25 人外框为 5×5、点击图标和空白区域均可施法、当前目标保持、战斗锁定、40 容器性能以及 `/reload` 持久化。通过前不进入自动提醒或更多团队布局选项。
+**工作：** 在 P0/P1 稳定后评估尺寸、间距、行数、增长方向、测试模式和 locale；为 mock 测试加入可执行的 CI job，并保持 release workflow 的版本校验。
+
+**验收标准：**
+
+- 新设置有 SavedVariables 迁移策略、命令/文档和 mock 覆盖；
+- 中英文及繁中客户端不会破坏显示或安全施法属性；
+- CI 能在干净环境执行全部 mock 测试；
+- 复杂 GUI 只有在明确扩大范围后才进入里程碑。
+
+## 10. 稳定版门槛
+
+`v0.1.0`（或后续稳定版）至少必须满足：
+
+1. 插件在 Retail 12.1 目标 Build 正常加载，`/reload` 无错误；
+2. Party 五人布局、固定 unit 和系统过滤 aura 正确显示；
+3. 当前角色的友方驱散技能能可靠自动识别，或有明确可用的手动选择；
+4. 战斗中一次玩家点击能对正确成员施法，且不改变当前目标；
+5. Aura 图标点击和方块边缘点击行为一致；
+6. 无 Lua、taint、secret-value、forbidden-frame、blocked-action 或 protected-action 错误；
+7. 至少完成一次真实五人副本，并完成必要的 Raid/性能门禁；
+8. README、CHANGELOG 和支持职业列表与实际验证结果一致。
+
+当前以上门槛尚未满足，发布状态仍为 `0.10.0-beta.5`。
+
+## 11. 相关文档状态
+
+- `README.md`：当前用户说明和 beta 风险提示；其中“已支持”仍应以正式服验证结果为准。
+- `BETA_TESTING.md`：Party/Raid 的执行步骤、检查项和回报模板，不代表测试已经通过。
+- `STAGE1_TESTING.md`：**历史原型文档**，仍描述只有 `player`/`party1` 和 `SELF`/`P1` 的阶段 1 版本，不应作为当前 `0.10.0-beta.5` 的功能说明。
+- `CHANGELOG.md`：版本变更记录，不是正式服验收记录。
+
+后续每次完成正式服测试、发现 API 限制或改变范围时，应同时更新本文件的状态、证据和验收结果。
