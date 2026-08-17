@@ -3,8 +3,8 @@
 ## 1. 审计结论
 
 - **审计日期：** 2026-08-17
-- **审计基准：** 当前 `HEAD`；插件版本 `0.10.0-beta.5`；Retail `Interface: 120100`
-- **当前判断：** Party/Raid 的主要代码路径已经实现，并有离线 mock 测试覆盖结构和初始化逻辑；但安全点击、正式服战斗行为、taint/Forbidden、Raid 性能和职业/专精覆盖尚未完成正式服验收。因此当前仍是 beta，不应依赖于高层钥匙、开荒或其他重要内容。
+- **审计基准：** 当前 `HEAD`；插件版本 `1.0.0`；Retail `Interface: 120100`
+- **当前判断：** Party/Raid 的主要代码路径已经实现，并有离线 mock 测试覆盖结构和初始化逻辑；`1.0.0` 作为首个正式版本发布。安全点击、正式服战斗行为、taint/Forbidden、Raid 性能和职业/专精覆盖仍需持续扩大正式服验收，不应未经实测直接依赖于高层钥匙、开荒或其他重要内容。
 
 本文是面向 review 的状态记录，不把“源码存在”误写成“正式服已验证”。每项能力使用以下状态：
 
@@ -52,13 +52,13 @@ SimpleDispel 的“一键驱散”是：插件为固定 unit token 创建成员�
 | `tests/aura_input_test.lua` | Aura Button 初始化和鼠标传播的 mock API 测试。 |
 | `.github/workflows/release.yml` | 校验 TOC 版本、打包 Lua/TOC 并创建 GitHub release。 |
 
-当前不存在计划早期列出的 `Layout.lua`、`Options.lua`、`Locale.lua`；对应布局、SavedVariables/命令功能暂时集中在 `Core.lua`。未来可以拆分，但这不是当前 beta 的已交付文件。
+当前不存在计划早期列出的 `Layout.lua`、`Options.lua`、`Locale.lua`；对应布局、SavedVariables/命令功能暂时集中在 `Core.lua`。未来可以拆分，但这不是当前 `1.0.0` 的已交付文件。
 
 ## 5. 已实现能力与证据
 
 | 能力 | 状态 | 代码证据 | review 说明 |
 |---|---|---|---|
-| Manifest、版本和 SavedVariables | 代码已实现 | `SimpleDispel.toc:1-11` | 当前版本为 `0.10.0-beta.5`。加载是否无 Lua 错误仍需游戏内确认。 |
+| Manifest、版本和 SavedVariables | 代码已实现 | `SimpleDispel.toc:1-11` | 当前版本为 `1.0.0`。加载是否无 Lua 错误仍需游戏内确认。 |
 | Party 五个固定 slot | 代码已实现；mock 已覆盖 | `Core.lua:305-337`；`tests/test.lua:223-231` | 固定为 `player`、`party1`-`party4`。 |
 | Raid 四十个固定 slot | 代码已实现；mock 已覆盖 | `Core.lua:370-408`；`tests/test.lua:223-231` | 固定为 `raid1`-`raid40`，不动态重排。 |
 | Party/Raid 安全显示切换 | 代码已实现；mock 已覆盖 | `Core.lua:230-236`、`SecureButtons.lua:53-58`；`tests/test.lua:249-261` | 具体客户端 protected frame 行为仍待验证。 |
@@ -181,13 +181,13 @@ SimpleDispel 的“一键驱散”是：插件为固定 unit token 创建成员�
 7. 至少完成一次真实五人副本，并完成必要的 Raid/性能门禁；
 8. README、CHANGELOG 和支持职业列表与实际验证结果一致。
 
-当前以上门槛尚未满足，发布状态仍为 `0.10.0-beta.5`。
+项目已以 `1.0.0` 进入正式版本线；以上尚未完成的验收门槛继续作为后续版本的强化目标和风险提示。
 
 ## 11. 相关文档状态
 
-- `README.md`：当前用户说明和 beta 风险提示；其中“已支持”仍应以正式服验证结果为准。
+- `README.md`：当前用户说明和正式版风险提示；其中“已支持”仍应以正式服验证结果为准。
 - `BETA_TESTING.md`：Party/Raid 的执行步骤、检查项和回报模板，不代表测试已经通过。
-- `STAGE1_TESTING.md`：**历史原型文档**，仍描述只有 `player`/`party1` 和 `SELF`/`P1` 的阶段 1 版本，不应作为当前 `0.10.0-beta.5` 的功能说明。
+- `STAGE1_TESTING.md`：**历史原型文档**，仍描述只有 `player`/`party1` 和 `SELF`/`P1` 的阶段 1 版本，不应作为当前 `1.0.0` 的功能说明。
 - `CHANGELOG.md`：版本变更记录，不是正式服验收记录。
 
 后续每次完成正式服测试、发现 API 限制或改变范围时，应同时更新本文件的状态、证据和验收结果。

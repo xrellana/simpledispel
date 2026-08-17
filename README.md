@@ -5,11 +5,11 @@ SimpleDispel is a lightweight, secure click-to-dispel addon for World of Warcraf
 It provides compact party and raid frames that show a Blizzard-filtered harmful aura and let you click the corresponding unit frame to cast your currently selected friendly dispel. The action is performed through a secure action button, so you do not need to switch your current target first.
 
 > [!WARNING]
-> SimpleDispel is currently beta software. The party and raid code paths are implemented, but complete live-client validation across all raid sizes, combat situations, click-through behavior, performance conditions, and taint scenarios is still in progress. Test it in low-risk content before relying on it for high keys, progression, or other important encounters.
+> SimpleDispel 1.0.0 is the first stable release. Protected-frame behavior still needs broader live-client validation across raid sizes, combat transitions, click-through behavior, performance conditions, and taint scenarios. Test it in low-risk content before relying on it for high keys, progression, or other important encounters.
 
 ## Current status
 
-- **Addon version:** `0.10.0-beta.5`
+- **Addon version:** `1.0.0`
 - **Target client:** World of Warcraft Retail 12.1+ (`Interface: 120100`)
 - **Supported layouts:** solo/party and raid
 - **Supported units:** `player`, `party1`-`party4`, and `raid1`-`raid40`
@@ -42,6 +42,7 @@ The addon does **not** provide an automatic dispel decision engine. It does not 
 - Secure visibility drivers for units that join or leave the group.
 - Automatic selection of a known friendly-dispel spell from the player’s spellbook.
 - Manual spell-ID override when automatic spell detection is not sufficient.
+- A localized empty state instead of inactive unit buttons when the current character has no known friendly dispel.
 - Separate saved position and scale for party and raid layouts.
 - Movable, lockable, resettable, and scalable layouts.
 - No target switching.
@@ -196,7 +197,7 @@ On login and after spell, specialization, or talent changes, SimpleDispel checks
 | Priest | Purify (`527`) → Purify Disease (`213634`) |
 | Shaman | Purify Spirit (`77130`) → Cleanse Spirit (`51886`) |
 
-The addon verifies whether a candidate is actually known instead of assuming that every character of a class has every spell. If no candidate is found, `/sd status` reports `spell=none`.
+The addon verifies whether a candidate is actually known instead of assuming that every character of a class has every spell. If no candidate is found, the inactive unit buttons are replaced by a compact explanation for the current specialization; `/sd status` also reports `spell=none`. The normal frames return automatically after a spell, specialization, or talent change makes a dispel available.
 
 To use a manual override:
 
@@ -210,7 +211,7 @@ To return to automatic selection:
 /sd spell auto
 ~~~
 
-A manual override is useful when a specialization, talent setup, or client change prevents automatic detection from selecting the desired spell. The override is applied to the secure buttons when protected attributes can be changed safely.
+A manual override is useful when a specialization, talent setup, or client change prevents automatic detection from selecting the desired spell. The override must be known by the current character and is applied to the secure buttons when protected attributes can be changed safely. A saved override that is not known on another character is ignored, allowing automatic detection or the no-dispel state to take over.
 
 ## Aura filters
 
@@ -276,6 +277,7 @@ The repository contains two types of testing material.
 The files under [tests](tests) simulate enough of the WoW API to exercise the addon’s structural behavior without launching the game:
 
 - [tests/test.lua](tests/test.lua) checks SavedVariables migration, creation of five party and forty raid buttons, Aura Container creation, name display, grid placement, visibility drivers, raid height calculation, scale commands, reset behavior, and combat-deferred updates.
+- [tests/dispel_spells_test.lua](tests/dispel_spells_test.lua) checks class spell detection, known manual overrides, cross-character override fallback, and classes without a friendly dispel.
 - [tests/secure_button_test.lua](tests/secure_button_test.lua) checks fixed unit attributes, secure click registration, spell attributes, and party/raid visibility drivers.
 - [tests/aura_input_test.lua](tests/aura_input_test.lua) checks Aura Button initialization, icon sizing, duration/cooldown setup, native mouse motion, and click propagation.
 
@@ -299,7 +301,7 @@ The detailed test matrix and issue-report template are in [BETA_TESTING.md](BETA
 
 ## Known limitations
 
-- This is a beta addon and has not completed full live-client validation for every supported raid size and combat transition.
+- The 1.0.0 release has not completed full live-client validation for every supported raid size and combat transition.
 - Only one system-filtered harmful aura is displayed per unit.
 - The addon does not automatically choose the most urgent or most valuable dispel target.
 - The player must click the relevant unit frame; there is no automatic casting.
@@ -312,7 +314,7 @@ The detailed test matrix and issue-report template are in [BETA_TESTING.md](BETA
 - Performance and taint behavior with forty Aura Containers in a real raid require further validation.
 - Retail 12.1+ is the target; Classic-era clients are not supported.
 
-If any of the following occurs, stop relying on the current beta build for important content and report it:
+If any of the following occurs, stop relying on the current build for important content and report it:
 
 - A click on one unit dispels a different unit.
 - The current target changes unexpectedly.
@@ -384,7 +386,7 @@ In particular:
 - Keep aura API-specific code isolated in [AuraDisplay.lua](AuraDisplay.lua).
 - Add or update mock tests when changing layout, button, or initialization behavior.
 - Update [CHANGELOG.md](CHANGELOG.md) when a user-visible behavior changes.
-- Validate changes in the live client before describing a beta feature as production-ready.
+- Validate changes in the live client before describing a feature as production-ready.
 
 ## License
 

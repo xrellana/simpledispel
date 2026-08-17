@@ -4,6 +4,7 @@ local stateDrivers = {}
 local inRaid = false
 local inCombat = false
 local groupMemberCount = 0
+local resolvedSpell = { id = 527, name = "Purify", icon = 1, known = true, source = "auto" }
 
 local objectMethods = {}
 
@@ -33,6 +34,10 @@ end
 
 function objectMethods:SetHeight(height)
     self.height = height
+end
+
+function objectMethods:SetShown(shown)
+    self.shown = shown
 end
 
 function objectMethods:SetScript(scriptName, callback)
@@ -119,7 +124,7 @@ end
 C_AddOns = {
     GetAddOnMetadata = function(_, field)
         if field == "Version" then
-            return "0.10.0-beta.5"
+            return "1.0.0"
         end
     end,
 }
@@ -195,7 +200,7 @@ addon.AuraDisplay = {
 
 addon.Spells = {
     Resolve = function()
-        return { id = 527, name = "Purify", icon = 1, known = true, source = "auto" }
+        return resolvedSpell
     end,
     GetInfo = function(_, spellID)
         return { id = spellID, name = "Manual", icon = 1, known = true }
@@ -263,6 +268,30 @@ assert(raidVisibility == "[group:raid] show; hide", "raid visibility driver is w
 eventFrame.scripts.OnEvent(eventFrame, "PLAYER_LOGIN")
 assert(addon.activeSpell and addon.activeSpell.id == 527, "spell was not assigned at login")
 assert(createdButtons[45].spell and createdButtons[45].spell.id == 527, "raid spell assignment failed")
+assert(addon.frames.party.content.shown == true, "party buttons must be shown when a dispel is available")
+assert(addon.frames.party.emptyState.shown == false, "party empty state must be hidden when a dispel is available")
+assert(addon.frames.raid.content.shown == true, "raid buttons must be shown when a dispel is available")
+assert(addon.frames.raid.emptyState.shown == false, "raid empty state must be hidden when a dispel is available")
+
+resolvedSpell = nil
+inCombat = true
+eventFrame.scripts.OnEvent(eventFrame, "SPELLS_CHANGED")
+assert(addon.pendingSpellRefresh == true, "combat spell change must defer availability updates")
+assert(addon.frames.party.content.shown == true, "party buttons must not be hidden during combat")
+inCombat = false
+eventFrame.scripts.OnEvent(eventFrame, "PLAYER_REGEN_ENABLED")
+assert(addon.activeSpell == nil, "missing dispel must clear the active spell")
+assert(addon.frames.party.content.shown == false, "party buttons must be hidden without a dispel")
+assert(addon.frames.party.emptyState.shown == true, "party empty state must explain the missing dispel")
+assert(addon.frames.raid.content.shown == false, "raid buttons must be hidden without a dispel")
+assert(addon.frames.raid.emptyState.shown == true, "raid empty state must explain the missing dispel")
+assert(addon.frames.raid.root.height == 70, "raid empty state must use a compact height")
+
+resolvedSpell = { id = 527, name = "Purify", icon = 1, known = true, source = "auto" }
+eventFrame.scripts.OnEvent(eventFrame, "PLAYER_SPECIALIZATION_CHANGED")
+assert(addon.activeSpell and addon.activeSpell.id == 527, "spec change must restore the detected dispel")
+assert(addon.frames.party.content.shown == true, "party buttons must return after dispel detection")
+assert(addon.frames.party.emptyState.shown == false, "party empty state must clear after dispel detection")
 
 SlashCmdList.SIMPLEDISPEL("scale raid 0.75")
 assert(SimpleDispelDB.layouts.raid.scale == 0.75, "explicit raid scale command failed")

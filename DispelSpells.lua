@@ -81,7 +81,9 @@ function Spells:Resolve()
     local manualSpellID = addon.db and addon.db.manualSpellID
     if manualSpellID then
         local manual = self:GetInfo(manualSpellID)
-        if manual then
+        -- SavedVariables are shared across characters. Ignore an override that
+        -- the current character does not know, then continue with auto detect.
+        if manual and manual.known then
             manual.source = "manual"
             return manual
         end

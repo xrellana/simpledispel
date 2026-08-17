@@ -3,7 +3,7 @@
 ## Title: SimpleDispel
 ## Notes: Lightweight secure click-to-dispel party and raid frames for Retail 12.1+
 ## Author: SimpleDispel contributors
-## Version: 0.10.0-beta.6
+## Version: 1.0.0
 ## SavedVariables: SimpleDispelDB
 
 DispelSpells.lua

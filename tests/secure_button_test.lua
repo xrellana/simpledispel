@@ -117,6 +117,13 @@ assert(spellOK, tostring(spellError))
 assert(playerButton.attributes.type1 == "spell", "left-click action type is not spell")
 assert(playerButton.attributes.spell1 == "Purify", "left-click spell attribute is wrong")
 
+local clearOK, clearError = addon.SecureButtons:SetSpell(playerButton, nil)
+assert(clearOK, tostring(clearError))
+assert(playerButton.attributes.type1 == nil, "missing dispel must clear the action type")
+assert(playerButton.attributes.spell1 == nil, "missing dispel must clear the spell attribute")
+assert(playerButton.simpleDispelSpellTexture.texture == nil, "missing dispel must clear the spell texture")
+assert(playerButton.simpleDispelSpellTexture.shown == false, "missing dispel must hide the spell texture")
+
 local partyButton = addon.SecureButtons:Create(
     NewRegion(),
     "SimpleDispelTestPartyButton",

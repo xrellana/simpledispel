@@ -10,8 +10,19 @@ local PARTY_GAP = 6
 local RAID_GAP = 4
 local FRAME_PADDING = 4
 local HANDLE_HEIGHT = 22
+local EMPTY_STATE_HEIGHT = HANDLE_HEIGHT + (FRAME_PADDING * 2) + 40
 local MIN_SCALE = 0.60
 local MAX_SCALE = 2.00
+local NO_DISPEL_TITLE = "No dispel spell available"
+local NO_DISPEL_HINT = "Frames return automatically when one is detected."
+local locale = GetLocale and GetLocale()
+if locale == "zhCN" then
+    NO_DISPEL_TITLE = "当前专精没有可用的驱散技能"
+    NO_DISPEL_HINT = "检测到驱散技能后，框体会自动启用。"
+elseif locale == "zhTW" then
+    NO_DISPEL_TITLE = "目前專精沒有可用的驅散技能"
+    NO_DISPEL_HINT = "偵測到驅散技能後，框架會自動啟用。"
+end
 
 local DEFAULT_LAYOUTS = {
     party = { point = "CENTER", relativePoint = "CENTER", x = 0, y = -180, scale = 1.00 },
@@ -219,11 +230,33 @@ local function CreateRoot(layoutKey, globalName, titleBase, width, height, visib
     local title = dragHandle:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     title:SetPoint("CENTER", dragHandle, "CENTER", 0, 0)
 
+    -- Keep protected unit buttons under one parent so the normal dispel UI can
+    -- be replaced with an explanatory empty state when no spell is available.
+    -- Availability changes are only applied out of combat by RefreshSpell.
+    local content = CreateFrame("Frame", nil, root)
+    content:SetAllPoints(root)
+
+    local emptyState = CreateFrame("Frame", nil, root)
+    emptyState:SetPoint("TOPLEFT", root, "TOPLEFT", FRAME_PADDING, -HANDLE_HEIGHT)
+    emptyState:SetPoint("BOTTOMRIGHT", root, "BOTTOMRIGHT", -FRAME_PADDING, FRAME_PADDING)
+    emptyState:EnableMouse(false)
+
+    local emptyTitle = emptyState:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    emptyTitle:SetPoint("CENTER", emptyState, "CENTER", 0, 7)
+    emptyTitle:SetText(NO_DISPEL_TITLE)
+
+    local emptyHint = emptyState:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    emptyHint:SetPoint("TOP", emptyTitle, "BOTTOM", 0, -2)
+    emptyHint:SetTextColor(0.62, 0.65, 0.70)
+    emptyHint:SetText(NO_DISPEL_HINT)
+
     local frameInfo = {
         root = root,
         dragHandle = dragHandle,
         title = title,
         titleBase = titleBase,
+        content = content,
+        emptyState = emptyState,
     }
     addon.frames[layoutKey] = frameInfo
 
@@ -325,14 +358,14 @@ local function CreatePartyUI(filterString)
 
     for index, definition in ipairs(definitions) do
         local button = AddUnitButton(
-            frameInfo.root,
+            frameInfo.content,
             definition,
             PARTY_BUTTON_SIZE,
             filterString,
             true
         )
         local x = FRAME_PADDING + ((index - 1) * (PARTY_BUTTON_SIZE + PARTY_GAP))
-        button:SetPoint("TOPLEFT", frameInfo.root, "TOPLEFT", x, -(HANDLE_HEIGHT + FRAME_PADDING))
+        button:SetPoint("TOPLEFT", frameInfo.content, "TOPLEFT", x, -(HANDLE_HEIGHT + FRAME_PADDING))
     end
 end
 
@@ -363,7 +396,8 @@ local function RefreshRaidFrameSize()
         return
     end
 
-    frameInfo.root:SetHeight(GetRaidFrameHeight())
+    local height = addon.activeSpell and GetRaidFrameHeight() or EMPTY_STATE_HEIGHT
+    frameInfo.root:SetHeight(height)
     addon.pendingRaidSizeRefresh = false
 end
 
@@ -371,7 +405,7 @@ local function CreateRaidUI(filterString)
     local width = (RAID_BUTTON_WIDTH * RAID_COLUMNS)
         + (RAID_GAP * (RAID_COLUMNS - 1))
         + (FRAME_PADDING * 2)
-    local height = GetRaidFrameHeight()
+    local height = addon.activeSpell and GetRaidFrameHeight() or EMPTY_STATE_HEIGHT
     local frameInfo = CreateRoot(
         "raid",
         "SimpleDispelRaidFrame",
@@ -392,7 +426,7 @@ local function CreateRaidUI(filterString)
             auraAnchor = "LEFT",
         }
         local button = AddUnitButton(
-            frameInfo.root,
+            frameInfo.content,
             definition,
             RAID_BUTTON_WIDTH,
             filterString,
@@ -403,8 +437,17 @@ local function CreateRaidUI(filterString)
         local row = math.floor((index - 1) / RAID_COLUMNS)
         local x = FRAME_PADDING + (column * (RAID_BUTTON_WIDTH + RAID_GAP))
         local y = -(HANDLE_HEIGHT + FRAME_PADDING + (row * (RAID_BUTTON_HEIGHT + RAID_GAP)))
-        button:SetPoint("TOPLEFT", frameInfo.root, "TOPLEFT", x, y)
+        button:SetPoint("TOPLEFT", frameInfo.content, "TOPLEFT", x, y)
     end
+end
+
+local function UpdateDispelAvailability(spell)
+    local hasDispel = spell ~= nil
+    for _, frameInfo in pairs(addon.frames) do
+        frameInfo.content:SetShown(hasDispel)
+        frameInfo.emptyState:SetShown(not hasDispel)
+    end
+    RefreshRaidFrameSize()
 end
 
 local function CreateUI()
@@ -413,6 +456,7 @@ local function CreateUI()
     CreateRaidUI(filterString)
     UpdateGroupLabels()
     ApplyAllFrameSettings()
+    UpdateDispelAvailability(nil)
 
     if addon.auraError then
         Print("Aura display unavailable: " .. addon.auraError)
@@ -431,6 +475,7 @@ function addon:RefreshSpell()
     end
 
     self.activeSpell = spell
+    UpdateDispelAvailability(spell)
     self.pendingSpellRefresh = false
     return true
 end
@@ -500,6 +545,10 @@ local function HandleSpellCommand(argument)
     local info = spellID and addon.Spells:GetInfo(spellID)
     if not info then
         Print("unknown spell ID: " .. tostring(argument))
+        return
+    end
+    if not info.known then
+        Print("spell is not known by this character: " .. info.name .. " (" .. spellID .. ")")
         return
     end
 
@@ -645,9 +694,18 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         addon:RefreshSpell()
         UpdateGroupLabels()
         RefreshRaidFrameSize()
-        Print("v" .. GetAddonVersion() .. " loaded; party + raid ready; use /sd status")
-    elseif event == "PLAYER_ENTERING_WORLD"
-        or event == "GROUP_ROSTER_UPDATE" then
+        if addon.activeSpell then
+            Print("v" .. GetAddonVersion() .. " loaded; party + raid ready; use /sd status")
+        else
+            Print("v" .. GetAddonVersion() .. " loaded; no dispel spell available; use /sd status")
+        end
+    elseif event == "PLAYER_ENTERING_WORLD" then
+        -- Retry after login because the spellbook can finish settling while
+        -- the player enters the world.
+        addon:RefreshSpell()
+        UpdateGroupLabels()
+        RefreshRaidFrameSize()
+    elseif event == "GROUP_ROSTER_UPDATE" then
         UpdateGroupLabels()
         RefreshRaidFrameSize()
     elseif event == "UNIT_NAME_UPDATE" then

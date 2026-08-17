@@ -24,6 +24,22 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v6
 
+      - name: Install Lua
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y lua5.4
+
+      - name: Run mock tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          lua5.4 tests/test.lua
+          lua5.4 tests/dispel_spells_test.lua
+          lua5.4 tests/secure_button_test.lua
+          lua5.4 tests/aura_input_test.lua
+
       - name: Validate version
         env:
           GH_TOKEN: ${{ github.token }}
