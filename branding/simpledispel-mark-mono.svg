@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">SimpleDispel single-color mark</title>
+  <desc id="desc">A white shield, cleansing sparkle, and pointer for use on dark backgrounds.</desc>
+
+  <defs>
+    <mask id="cursorGap" maskUnits="userSpaceOnUse" x="0" y="0" width="512" height="512">
+      <rect width="512" height="512" fill="#FFFFFF"/>
+      <path d="M278 236V368L313 336L349 414L387 396L350 321L397 317L278 236Z" fill="#000000" stroke="#000000" stroke-width="16" stroke-linejoin="round"/>
+    </mask>
+  </defs>
+
+  <g mask="url(#cursorGap)">
+    <path d="M256 44C298 65 342 76 388 85V238C388 333 336 402 256 444C176 402 124 333 124 238V85C170 76 214 65 256 44Z" fill="none" stroke="#FFFFFF" stroke-width="18" stroke-linejoin="round"/>
+    <rect x="178" y="168" width="156" height="156" rx="34" fill="none" stroke="#FFFFFF" stroke-width="12"/>
+    <path d="M232 166C239 195 253 209 282 216C253 223 239 237 232 266C225 237 211 223 182 216C211 209 225 195 232 166Z" fill="#FFFFFF"/>
+  </g>
+  <path d="M278 236V368L313 336L349 414L387 396L350 321L397 317L278 236Z" fill="#FFFFFF"/>
+</svg>

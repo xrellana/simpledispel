@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">SimpleDispel project avatar</title>
+  <desc id="desc">A mint shield frames a harmful aura tile as a pointer triggers a cleansing sparkle.</desc>
+  <defs>
+    <linearGradient id="bg" x1="116" y1="84" x2="868" y2="944" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#102C3A"/>
+      <stop offset="0.54" stop-color="#091A25"/>
+      <stop offset="1" stop-color="#061018"/>
+    </linearGradient>
+    <linearGradient id="shield" x1="356" y1="190" x2="690" y2="824" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#123D43"/>
+      <stop offset="1" stop-color="#09232D"/>
+    </linearGradient>
+    <linearGradient id="aura" x1="386" y1="356" x2="623" y2="596" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#B16EFF"/>
+      <stop offset="0.48" stop-color="#7048D8"/>
+      <stop offset="1" stop-color="#3D287D"/>
+    </linearGradient>
+    <linearGradient id="mint" x1="358" y1="250" x2="704" y2="760" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#92FFD4"/>
+      <stop offset="0.48" stop-color="#4EE6A8"/>
+      <stop offset="1" stop-color="#25B987"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="0" cy="0" r="1" gradientTransform="translate(510 462) rotate(90) scale(386)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4EE6A8" stop-opacity="0.2"/>
+      <stop offset="1" stop-color="#4EE6A8" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="glow" x="-45%" y="-45%" width="190%" height="190%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="16" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="180%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="20" stdDeviation="22" flood-color="#02070B" flood-opacity="0.55"/>
+    </filter>
+    <clipPath id="canvas">
+      <rect x="24" y="24" width="976" height="976" rx="224"/>
+    </clipPath>
+  </defs>
+
+  <rect width="1024" height="1024" fill="#07131C"/>
+  <g clip-path="url(#canvas)">
+    <rect x="24" y="24" width="976" height="976" rx="224" fill="url(#bg)"/>
+    <circle cx="510" cy="462" r="386" fill="url(#halo)"/>
+
+    <g fill="none" stroke="#BFFFE6" stroke-width="3" opacity="0.07">
+      <path d="M126 306H898M126 512H898M126 718H898"/>
+      <path d="M306 126V898M512 126V898M718 126V898"/>
+      <rect x="128" y="128" width="768" height="768" rx="152"/>
+    </g>
+
+    <g opacity="0.26">
+      <circle cx="182" cy="284" r="12" fill="#9D6BFF"/>
+      <circle cx="218" cy="242" r="7" fill="#9D6BFF"/>
+      <circle cx="839" cy="752" r="10" fill="#4EE6A8"/>
+      <circle cx="870" cy="712" r="6" fill="#4EE6A8"/>
+    </g>
+
+    <g filter="url(#shadow)">
+      <path d="M512 156C590 196 672 218 756 234V474C756 650 658 780 512 856C366 780 268 650 268 474V234C352 218 434 196 512 156Z" fill="url(#shield)" stroke="url(#mint)" stroke-width="24" stroke-linejoin="round"/>
+      <path d="M512 214C572 243 636 262 700 276V470C700 608 626 711 512 776C398 711 324 608 324 470V276C388 262 452 243 512 214Z" fill="none" stroke="#BFFFF0" stroke-opacity="0.14" stroke-width="8"/>
+    </g>
+
+    <g>
+      <rect x="360" y="338" width="280" height="280" rx="62" fill="url(#aura)" stroke="#D7C6FF" stroke-opacity="0.8" stroke-width="10"/>
+      <path d="M407 550C439 502 450 436 416 379M592 385C545 411 521 469 538 532M420 569C472 586 544 575 592 530" fill="none" stroke="#2E1A68" stroke-width="20" stroke-linecap="round" opacity="0.5"/>
+      <circle cx="568" cy="388" r="17" fill="#F0E8FF" fill-opacity="0.65"/>
+      <circle cx="410" cy="540" r="12" fill="#D5BFFF" fill-opacity="0.5"/>
+    </g>
+
+    <g filter="url(#glow)">
+      <path d="M468 338C480 393 507 420 562 432C507 444 480 471 468 526C456 471 429 444 374 432C429 420 456 393 468 338Z" fill="url(#mint)"/>
+      <path d="M584 436C589 459 600 470 623 475C600 480 589 491 584 514C579 491 568 480 545 475C568 470 579 459 584 436Z" fill="#D9FFF0"/>
+    </g>
+
+    <g fill="none" stroke="#9AFFF0" stroke-linecap="round">
+      <path d="M561 470A62 62 0 0 1 625 532" stroke-width="12" opacity="0.7"/>
+      <path d="M555 436A102 102 0 0 1 659 538" stroke-width="8" opacity="0.32"/>
+    </g>
+
+    <path d="M548 472V704L607 650L670 785L731 756L669 625L748 618L548 472Z" fill="#F5FFFB" stroke="#07141D" stroke-width="18" stroke-linejoin="round"/>
+    <path d="M603 642L670 785L705 769L638 627" fill="#4EE6A8" opacity="0.42"/>
+  </g>
+
+  <rect x="24" y="24" width="976" height="976" rx="224" fill="none" stroke="#BFFFF0" stroke-opacity="0.18" stroke-width="8"/>
+</svg>

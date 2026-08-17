@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">SimpleDispel flat project avatar</title>
+  <desc id="desc">A simplified mint shield, purple aura, cleansing sparkle, and click pointer on a dark background.</desc>
+
+  <rect width="1024" height="1024" fill="#07131C"/>
+  <rect x="24" y="24" width="976" height="976" rx="224" fill="#091923"/>
+  <rect x="40" y="40" width="944" height="944" rx="208" fill="none" stroke="#4EE6A8" stroke-opacity="0.16" stroke-width="8"/>
+
+  <path d="M512 156C590 196 672 218 756 234V474C756 650 658 780 512 856C366 780 268 650 268 474V234C352 218 434 196 512 156Z" fill="#11313A" stroke="#4EE6A8" stroke-width="28" stroke-linejoin="round"/>
+  <rect x="360" y="338" width="280" height="280" rx="62" fill="#7048D8" stroke="#D8C8FF" stroke-width="10"/>
+  <path d="M468 338C480 393 507 420 562 432C507 444 480 471 468 526C456 471 429 444 374 432C429 420 456 393 468 338Z" fill="#4EE6A8"/>
+  <path d="M584 436C589 459 600 470 623 475C600 480 589 491 584 514C579 491 568 480 545 475C568 470 579 459 584 436Z" fill="#D9FFF0"/>
+  <path d="M548 472V704L607 650L670 785L731 756L669 625L748 618L548 472Z" fill="#F5FFFB" stroke="#07141D" stroke-width="18" stroke-linejoin="round"/>
+</svg>
