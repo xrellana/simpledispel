@@ -1,5 +1,25 @@
 local addon = {}
 local stateDrivers = {}
+local tooltipAnchorCalls = {}
+
+GameTooltip = {
+    SetUnit = function(self, unit)
+        self.unit = unit
+    end,
+    Show = function(self)
+        self.shown = true
+    end,
+    Hide = function(self)
+        self.shown = false
+    end,
+}
+
+function GameTooltip_SetDefaultAnchor(tooltip, owner)
+    tooltipAnchorCalls[#tooltipAnchorCalls + 1] = {
+        tooltip = tooltip,
+        owner = owner,
+    }
+end
 
 local function NewRegion()
     local region = {
@@ -125,6 +145,15 @@ assert(playerButton.registeredClicks[2] == "LeftButtonDown", "mouse-down registr
 assert(playerButton.attributes.unit == "player", "fixed player unit is missing")
 assert(playerButton.attributes.useOnKeyDown == false, "click timing must not depend on the CVar")
 assert(playerButton.simpleDispelRangeOverlay.mouseEnabled == false, "range overlay must not intercept clicks")
+
+playerButton.scripts.OnEnter(playerButton)
+assert(#tooltipAnchorCalls == 1, "unit tooltip must use the default game anchor")
+assert(tooltipAnchorCalls[1].tooltip == GameTooltip, "unit tooltip anchored the wrong tooltip")
+assert(tooltipAnchorCalls[1].owner == playerButton, "unit tooltip owner is wrong")
+assert(GameTooltip.unit == "player", "unit tooltip targets the wrong unit")
+assert(GameTooltip.shown == true, "unit tooltip was not shown")
+playerButton.scripts.OnLeave(playerButton)
+assert(GameTooltip.shown == false, "unit tooltip was not hidden on leave")
 
 addon.SecureButtons:SetRangeState(playerButton, false)
 assert(playerButton.simpleDispelRangeState == "out", "false range result must be out of range")

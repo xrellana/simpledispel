@@ -74,10 +74,10 @@ end
 
 local function AddUnitTooltip(button)
     button:SetScript("OnEnter", function(self)
-        if not GameTooltip or not GameTooltip.SetOwner or not GameTooltip.SetUnit then
+        if not GameTooltip or not GameTooltip_SetDefaultAnchor or not GameTooltip.SetUnit then
             return
         end
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip_SetDefaultAnchor(GameTooltip, self)
         GameTooltip:SetUnit(self.simpleDispelUnit)
         GameTooltip:Show()
     end)
