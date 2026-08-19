@@ -6,10 +6,13 @@ addon.SecureButtons = SecureButtons
 local BUTTON_SIZE = 48
 SecureButtons.BUTTON_SIZE = BUTTON_SIZE
 
-local function AddBorder(frame)
+local function AddBorder(frame, drawLayer, red, green, blue, alpha)
+    local lines = {}
+
     local function NewLine()
-        local line = frame:CreateTexture(nil, "BORDER")
-        line:SetColorTexture(0.12, 0.12, 0.12, 1)
+        local line = frame:CreateTexture(nil, drawLayer or "BORDER")
+        line:SetColorTexture(red or 0.12, green or 0.12, blue or 0.12, alpha or 1)
+        lines[#lines + 1] = line
         return line
     end
 
@@ -32,6 +35,57 @@ local function AddBorder(frame)
     right:SetPoint("TOPRIGHT")
     right:SetPoint("BOTTOMRIGHT")
     right:SetWidth(1)
+
+    return lines
+end
+
+local function SetBorderAlpha(lines, alpha)
+    for _, line in ipairs(lines) do
+        line:SetAlpha(alpha)
+    end
+end
+
+local function CreateRangeOverlay(button)
+    local overlay = CreateFrame("Frame", nil, button)
+    overlay:SetAllPoints(button)
+    overlay:EnableMouse(false)
+
+    local shade = overlay:CreateTexture(nil, "BACKGROUND")
+    shade:SetAllPoints(overlay)
+    shade:SetColorTexture(0.01, 0.01, 0.015, 1)
+    shade:SetAlpha(0)
+
+    local border = AddBorder(overlay, "OVERLAY", 0.95, 0.18, 0.12, 1)
+    SetBorderAlpha(border, 0)
+
+    local mark = overlay:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    mark:SetPoint("TOPRIGHT", overlay, "TOPRIGHT", -2, -1)
+    mark:SetText("×")
+    mark:SetTextColor(1, 0.24, 0.18, 1)
+    -- The overlay belongs to a protected action button. Keep every region
+    -- created and shown permanently; combat updates only change alpha.
+    mark:SetAlpha(0)
+
+    button.simpleDispelRangeOverlay = overlay
+    button.simpleDispelRangeShade = shade
+    button.simpleDispelRangeBorder = border
+    button.simpleDispelRangeMark = mark
+end
+
+local function AddUnitTooltip(button)
+    button:SetScript("OnEnter", function(self)
+        if not GameTooltip or not GameTooltip.SetOwner or not GameTooltip.SetUnit then
+            return
+        end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetUnit(self.simpleDispelUnit)
+        GameTooltip:Show()
+    end)
+    button:SetScript("OnLeave", function()
+        if GameTooltip then
+            GameTooltip:Hide()
+        end
+    end)
 end
 
 function SecureButtons:Create(parent, globalName, unit, shortLabel, requestedWidth, labelMode, requestedHeight)
@@ -93,7 +147,61 @@ function SecureButtons:Create(parent, globalName, unit, shortLabel, requestedWid
     button.simpleDispelLabel = label
     button.simpleDispelFallbackLabel = shortLabel
     button.simpleDispelUnit = unit
+    CreateRangeOverlay(button)
+    AddUnitTooltip(button)
     return button
+end
+
+function SecureButtons:RaiseRangeOverlay(button, visualFrame)
+    local overlay = button and button.simpleDispelRangeOverlay
+    if not overlay or not overlay.SetFrameLevel then
+        return
+    end
+
+    local level = 0
+    if button.GetFrameLevel then
+        local ok, buttonLevel = pcall(button.GetFrameLevel, button)
+        if ok and type(buttonLevel) == "number" then
+            level = buttonLevel
+        end
+    end
+    if visualFrame and visualFrame.GetFrameLevel then
+        local ok, visualLevel = pcall(visualFrame.GetFrameLevel, visualFrame)
+        if ok and type(visualLevel) == "number" then
+            level = math.max(level, visualLevel)
+        end
+    end
+
+    -- Aura slots may create their own child frames above the container. Keep
+    -- the mouse-disabled range layer comfortably above that visual stack.
+    overlay:SetFrameLevel(level + 10)
+end
+
+function SecureButtons:SetRangeState(button, inRange)
+    if not button or not button.simpleDispelRangeShade then
+        return
+    end
+
+    local state = "unknown"
+    if inRange == true then
+        state = "in"
+    elseif inRange == false then
+        state = "out"
+    end
+    if button.simpleDispelRangeState == state then
+        return
+    end
+
+    button.simpleDispelRangeState = state
+    if state == "out" then
+        button.simpleDispelRangeShade:SetAlpha(0.52)
+        SetBorderAlpha(button.simpleDispelRangeBorder, 1)
+        button.simpleDispelRangeMark:SetAlpha(1)
+    else
+        button.simpleDispelRangeShade:SetAlpha(0)
+        SetBorderAlpha(button.simpleDispelRangeBorder, 0)
+        button.simpleDispelRangeMark:SetAlpha(0)
+    end
 end
 
 function SecureButtons:SetSpell(button, spell)

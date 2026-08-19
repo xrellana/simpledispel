@@ -36,6 +36,8 @@ SimpleDispel 的“一键驱散”是：插件为固定 unit token 创建成员�
 - 不使用 `UNIT_AURA` payload、Aura Button 的显示/隐藏/尺寸变化、tooltip、帧数量、声音、耗时或布局变化推导战斗信息。
 - 每个安全按钮永久绑定固定 unit token；protected attribute 只在脱战时更新。
 - Party/Raid 成员显示和布局变化使用安全状态驱动；战斗中的非安全更新进入脱战队列。
+- 范围提示只针对当前实际选中的友方驱散 spell，通过 `C_Spell.IsSpellInRange` 检查现存 unit，约每 0.25 秒刷新；它只改变普通视觉层，不禁用安全点击。
+- `IsSpellInRange` 返回 `true` 时保持正常外观，`false` 时显示暗色遮罩、红边和 `×`，`nil` 时保持中性；范围提示不判断 LoS，并允许客户端刷新延迟。
 - 若官方 API 不支持某项功能，应停止该项或记录降级，不使用 taint、hook、时序漏洞或污染安全路径绕过限制。
 
 ## 4. 当前实际文件结构
@@ -62,10 +64,11 @@ SimpleDispel 的“一键驱散”是：插件为固定 unit token 创建成员�
 | Party 五个固定 slot | 代码已实现；mock 已覆盖 | `Core.lua:305-337`；`tests/test.lua:223-231` | 固定为 `player`、`party1`-`party4`。 |
 | Raid 四十个固定 slot | 代码已实现；mock 已覆盖 | `Core.lua:370-408`；`tests/test.lua:223-231` | 固定为 `raid1`-`raid40`，不动态重排。 |
 | Party/Raid 安全显示切换 | 代码已实现；mock 已覆盖 | `Core.lua:230-236`、`SecureButtons.lua:53-58`；`tests/test.lua:249-261` | 具体客户端 protected frame 行为仍待验证。 |
-| Raid 五列及按人数调整行数 | 代码已实现；mock 已覆盖 | `Core.lua:339-368,402-406`；`tests/test.lua:270-301` | 10/20/25/30/40 人的高度有 mock 断言。 |
-| 成员名称显示 | 代码已实现；mock 已覆盖 | `Core.lua:276-303`；`tests/test.lua:232-240` | 名称只交给 FontString，不能用于排序或战斗决策。 |
+| Raid 八列及按人数调整行数 | 代码已实现；mock 已覆盖 | `Core.lua`；`tests/test.lua` | 固定 28 × 28 方格，8 列、最多 5 行；10/20/25/30/40 人分别使用 2/3/4/4/5 行。 |
+| Party 成员名称与 Raid tooltip 识别 | 代码已实现；mock 已覆盖 | `Core.lua`；`tests/test.lua` | Party 可直接显示名称；Raid 不常驻显示姓名，普通 unit button tooltip 仅用于识别，不能用于排序或战斗决策。 |
 | 每个单位一个 Aura Container | 代码已实现；mock 已覆盖 | `AuraDisplay.lua:104-164`；`Core.lua:241-273`；`tests/test.lua:232` | 当前创建 45 个容器。 |
 | 系统过滤 aura、图标、cooldown、层数、可选持续时间 | 代码已实现；仅部分初始化由 mock 覆盖 | `AuraDisplay.lua:8-12,14-84`；`tests/aura_input_test.lua:111-137` | mock 只覆盖部分初始化调用；过滤器实际语义、tooltip、驱散类型边框和真实客户端显示仍待正式服确认。 |
+| 驱散范围视觉提示 | 代码已实现；正式服待验证 | `Core.lua`；`C_Spell.IsSpellInRange` | 使用当前实际驱散 spell，约每 0.25 秒刷新；`true` 正常、`false` 暗色遮罩+红边+`×`、`nil` 中性。只提示不禁用点击，不能判断 LoS。 |
 | Aura 图标左键传播降级路径 | 代码已实现；`SetPropagateMouseClicks` 成功路径 mock 已覆盖 | `AuraDisplay.lua:20-40`；`tests/aura_input_test.lua:122-126` | `SetPassThroughButtons` fallback 未覆盖；能否在真实受保护 Aura Button 上稳定传到安全按钮仍是 P0。 |
 | 固定 unit 的安全施法按钮 | 代码已实现；mock 已覆盖 | `SecureButtons.lua:37-57,99-119`；`tests/secure_button_test.lua:96-145` | 只证明属性和注册方式，不证明战斗内施法成功。 |
 | 左键按下/抬起及 `useOnKeyDown=false` | 代码已实现；mock 已覆盖 | `SecureButtons.lua:42-50`；`tests/secure_button_test.lua:104-108` | 用于避免依赖账号级 `ActionButtonUseKeyDown`。 |
@@ -73,7 +76,7 @@ SimpleDispel 的“一键驱散”是：插件为固定 unit token 创建成员�
 | 专精、技能和天赋变化触发刷新 | 代码已实现 | `Core.lua:633-670` | 当前只是重新运行职业候选列表，并未实现真正的专精/天赋条件逻辑。 |
 | 手动 spell ID override | 代码已实现 | `Core.lua:491-512`；`DispelSpells.lua:80-87` | 已知风险：只确认客户端能取得 spell 信息，不强制确认角色已学会该 spell。 |
 | SavedVariables、旧版迁移和 Party/Raid 独立缩放 | 代码已实现；mock 已覆盖 | `Core.lua:78-107,149-183`；`tests/test.lua:219-222,267-301` | schema 当前为 3。 |
-| 锁定、解锁、拖动、重置和战斗延迟 | 代码已实现；部分 mock 已覆盖 | `Core.lua:116-183,524-587`；`tests/test.lua:286-301` | 战斗内实际 protected 行为仍需验证。 |
+| 锁定、解锁、拖动、重置和战斗延迟 | 代码已实现；部分 mock 已覆盖 | `Core.lua`；`tests/test.lua` | 锁定时隐藏 Raid 标题和大背景并上移网格；解锁时显示小型 `SD` 拖动锚点。战斗内实际 protected 行为仍需验证。 |
 | 诊断命令 `/sd status` | 代码已实现 | `Core.lua:438-480` | 可输出版本、Build、模式、容器数、过滤器和技能信息。 |
 | 过滤器、缩放、重置和 spell 命令 | 代码已实现；部分 mock 已覆盖 | `Core.lua:482-610`；`tests/test.lua:267-288` | 修改 filter 后需要 `/reload` 重建容器。 |
 | Release 打包工作流 | 代码已实现 | `.github/workflows/release.yml:1-77` | 只打包 Lua/TOC 并发布；当前没有 test job。 |
@@ -82,8 +85,8 @@ SimpleDispel 的“一键驱散”是：插件为固定 unit token 创建成员�
 
 已有测试覆盖：
 
-- `tests/test.lua`：SavedVariables 迁移、45 个按钮和容器的结构、名称、网格位置、visibility driver、Raid 高度、缩放/重置和战斗延迟。
-- `tests/secure_button_test.lua`：固定 unit、左右键注册、`useOnKeyDown`、spell attribute、Party/Raid visibility driver。
+- `tests/test.lua`：SavedVariables 迁移、45 个按钮和容器的结构、unit-button 设置、网格位置、visibility driver、Raid 高度、缩放/重置和战斗延迟。
+- `tests/secure_button_test.lua`：固定 unit、左右键注册、`useOnKeyDown`、spell attribute、范围视觉三态、Party/Raid visibility driver。
 - `tests/aura_input_test.lua`：Aura Button 尺寸、图标、cooldown、层数、持续时间、native mouse motion 和点击传播初始化。
 
 这些测试使用自建 API mock，不能证明真实客户端会接受 protected action，不能证明目标不变、点击图标一定成功，也不能发现真实 taint、`ADDON_ACTION_FORBIDDEN`、secret-value/forbidden-frame、战斗 roster 行为或 40 个容器的性能问题。`tests/test.lua` 还替换了 `SecureButtons`、`AuraDisplay` 和 `Spells`，因此不等于端到端集成测试。
@@ -98,6 +101,8 @@ SimpleDispel 的“一键驱散”是：插件为固定 unit token 创建成员�
 - Party 中点击空白区域、Aura 图标中心和图标边缘，均只对被点击的固定 unit 施放技能。
 - 点击前后当前目标保持不变；射程外、死亡、冷却或无可驱散效果时只产生正常施法失败。
 - Aura 出现、消失、倒计时、层数、tooltip、过滤器结果和图标点击传播符合预期。
+- 10/20/25/30/40 人 Raid 均显示为 28 × 28、8 列、最多 5 行的固定网格；锁定隐藏 Raid 标题/大背景并上移网格，解锁显示小型 `SD` 锚点。
+- 范围提示按当前实际驱散 spell 约每 0.25 秒刷新；`true`、`false`、`nil` 的视觉状态正确，提示不禁用点击，也不把 LoS 当作范围判断。
 - 战斗中加入、离开、掉线、死亡、复活、换队和 roster 变化不产生 protected/forbidden 错误；脱战后延迟更新能够恢复。
 - 没有 `ADDON_ACTION_FORBIDDEN`、secret-value、forbidden-frame、blocked-action 或 taint 记录。
 - 10/20/25/30/40 人团队均能正确显示固定 `raidN` 对应成员，不误点其他成员。
@@ -122,7 +127,8 @@ SimpleDispel 的“一键驱散”是：插件为固定 unit token 创建成员�
 - `/sd spell <spellID>` 不强制验证角色已学会该 spell；误设未知或不可用技能可能导致按钮不可施法。
 - 每个单位只显示一个系统过滤后的 `dispel` slot；过滤器具体结果由客户端决定，插件不解析 aura。
 - Raid roster 在战斗中变化时，外框高度可能暂时保持旧值，计划在脱战后更新。
-- Raid 使用固定 `raid1`-`raid40` 顺序，名字只是显示用途，不保证按姓名、职业或职责排序。
+- Raid 使用固定 `raid1`-`raid40` 顺序和 8 列、最多 5 行的 28 × 28 方格；普通 unit-button tooltip 只用于识别，不保证按姓名、职业或职责排序。
+- 范围视觉状态约每 0.25 秒刷新，可能因客户端延迟暂时滞后；`nil` 表示未知，提示不能判断 LoS；即使范围外也保留点击能力。
 - 45 个 Aura Container 的真实性能和 taint 尚无证据。
 
 ### 明确暂不做
@@ -134,12 +140,13 @@ SimpleDispel 的“一键驱散”是：插件为固定 unit token 创建成员�
 
 ### P0：正式服安全点击门禁
 
-**工作：** 使用 Retail 12.1 实际客户端完成单人、五人和至少一个团队规模的低风险测试；重点验证空白方块、Aura 图标、正确 unit、当前目标、战斗状态和错误日志。
+**工作：** 使用 Retail 12.1 实际客户端完成单人、五人和至少一个团队规模的低风险测试；重点验证 28 × 28 Raid 网格、空白方块、Aura 图标、正确 unit、当前目标、范围视觉状态、战斗状态和错误日志。
 
 **验收标准：**
 
 - 每次点击只对显示方块固定绑定的 unit 施法；当前目标不改变；
 - Aura 显示/消失和图标点击传播在战斗中稳定；
+- 范围提示对当前实际驱散 spell 的 `true`、`false`、`nil` 状态表现正确，且不阻止范围外点击；LoS 不被误判为范围状态；
 - roster 变化和脱战延迟更新可恢复；
 - 无 Lua、`ADDON_ACTION_FORBIDDEN`、secret/forbidden、blocked-action 或 taint 问题；
 - 记录完整测试结果，而不是只更新 checklist 状态。
@@ -148,7 +155,7 @@ SimpleDispel 的“一键驱散”是：插件为固定 unit token 创建成员�
 
 ### P1：职业覆盖与 Raid 可靠性
 
-**工作：** 逐职业/专精/天赋验证候选技能和手动 override；完成 10/20/25/30/40 人 roster、死亡/掉线/加入/离开、Raid 点击绑定及性能测试。
+**工作：** 逐职业/专精/天赋验证候选技能和手动 override；完成 10/20/25/30/40 人 roster、8 列最多 5 行 Raid 网格、死亡/掉线/加入/离开、范围提示、Raid 点击绑定及性能测试。
 
 **验收标准：**
 
@@ -159,7 +166,7 @@ SimpleDispel 的“一键驱散”是：插件为固定 unit token 创建成员�
 
 ### P2：易用性、本地化与工程质量
 
-**工作：** 在 P0/P1 稳定后评估尺寸、间距、行数、增长方向、测试模式和 locale；为 mock 测试加入可执行的 CI job，并保持 release workflow 的版本校验。
+**工作：** 在 P0/P1 稳定后评估尺寸、间距、行数、增长方向、测试模式和 locale；28 × 28、8 列最多 5 行作为当前默认布局保持稳定；为 mock 测试加入可执行的 CI job，并保持 release workflow 的版本校验。
 
 **验收标准：**
 

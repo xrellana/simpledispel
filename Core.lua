@@ -3,13 +3,13 @@ local addonName, addon = ...
 local PREFIX = "|cff4ee6a8SimpleDispel|r:"
 local FILTER_HELP = "mine (HARMFUL|RAID), group, all"
 local PARTY_BUTTON_SIZE = 48
-local RAID_BUTTON_WIDTH = 96
-local RAID_BUTTON_HEIGHT = 32
-local RAID_COLUMNS = 5
+local RAID_BUTTON_SIZE = 28
+local RAID_COLUMNS = 8
 local PARTY_GAP = 6
-local RAID_GAP = 4
+local RAID_GAP = 2
 local FRAME_PADDING = 4
 local HANDLE_HEIGHT = 22
+local RANGE_UPDATE_INTERVAL = 0.25
 local EMPTY_STATE_HEIGHT = HANDLE_HEIGHT + (FRAME_PADDING * 2) + 40
 local MIN_SCALE = 0.60
 local MAX_SCALE = 2.00
@@ -36,6 +36,9 @@ addon.unitButtons = {}
 addon.pendingSpellRefresh = false
 addon.pendingLayoutRefresh = false
 addon.pendingRaidSizeRefresh = false
+
+local PositionRaidButtons
+local RefreshRaidFrameSize
 
 local function Print(message)
     print(PREFIX, message)
@@ -146,14 +149,28 @@ local function UpdateLockState()
     end
 
     local canDrag = not addon.db.locked and not InCombatLockdown()
-    for _, frameInfo in pairs(addon.frames) do
+    for layoutKey, frameInfo in pairs(addon.frames) do
         frameInfo.dragHandle:EnableMouse(canDrag)
-        frameInfo.dragHandle:SetAlpha(addon.db.locked and 0.72 or 1)
-        local title = frameInfo.titleBase
-        if not addon.db.locked then
-            title = title .. "  |cffaaaaaa(drag)|r"
+        if layoutKey == "raid" then
+            frameInfo.dragHandle:SetShown(not addon.db.locked)
+            frameInfo.title:SetText("SD")
+            frameInfo.background:SetShown(not addon.db.locked or not addon.activeSpell)
+        else
+            frameInfo.dragHandle:SetShown(true)
+            frameInfo.dragHandle:SetAlpha(addon.db.locked and 0.72 or 1)
+            local title = frameInfo.titleBase
+            if not addon.db.locked then
+                title = title .. "  |cffaaaaaa(drag)|r"
+            end
+            frameInfo.title:SetText(title)
         end
-        frameInfo.title:SetText(title)
+    end
+
+    if PositionRaidButtons then
+        PositionRaidButtons()
+    end
+    if RefreshRaidFrameSize then
+        RefreshRaidFrameSize()
     end
 end
 
@@ -193,7 +210,7 @@ local function ApplyAllFrameSettings()
     UpdateLockState()
 end
 
-local function CreateRoot(layoutKey, globalName, titleBase, width, height, visibilityDriver)
+local function CreateRoot(layoutKey, globalName, titleBase, width, height, visibilityDriver, compactHandle)
     local root = CreateFrame("Frame", globalName, UIParent)
     root:SetSize(width, height)
     root:SetFrameStrata("MEDIUM")
@@ -205,9 +222,14 @@ local function CreateRoot(layoutKey, globalName, titleBase, width, height, visib
     background:SetColorTexture(0.015, 0.018, 0.024, 0.88)
 
     local dragHandle = CreateFrame("Frame", nil, root)
-    dragHandle:SetPoint("TOPLEFT", root, "TOPLEFT", 0, 0)
-    dragHandle:SetPoint("TOPRIGHT", root, "TOPRIGHT", 0, 0)
-    dragHandle:SetHeight(HANDLE_HEIGHT)
+    if compactHandle then
+        dragHandle:SetPoint("TOPLEFT", root, "TOPLEFT", FRAME_PADDING, 0)
+        dragHandle:SetSize(RAID_BUTTON_SIZE, HANDLE_HEIGHT)
+    else
+        dragHandle:SetPoint("TOPLEFT", root, "TOPLEFT", 0, 0)
+        dragHandle:SetPoint("TOPRIGHT", root, "TOPRIGHT", 0, 0)
+        dragHandle:SetHeight(HANDLE_HEIGHT)
+    end
     dragHandle:RegisterForDrag("LeftButton")
     dragHandle:SetScript("OnDragStart", function()
         if addon.db.locked or InCombatLockdown() then
@@ -252,6 +274,7 @@ local function CreateRoot(layoutKey, globalName, titleBase, width, height, visib
 
     local frameInfo = {
         root = root,
+        background = background,
         dragHandle = dragHandle,
         title = title,
         titleBase = titleBase,
@@ -302,6 +325,7 @@ local function AddUnitButton(root, definition, buttonWidth, filterString, showDu
     else
         addon.auraError = addon.auraError or tostring(auraError)
     end
+    addon.SecureButtons:RaiseRangeOverlay(button, container)
 
     return button
 end
@@ -327,11 +351,6 @@ end
 local function UpdateGroupLabels()
     for index = 1, 4 do
         UpdateUnitLabel("party" .. index)
-    end
-    -- Keep the protected raid1..raid40 binding and Blizzard roster order.
-    -- Names are display-only and never participate in sorting or decisions.
-    for index = 1, 40 do
-        UpdateUnitLabel("raid" .. index)
     end
 end
 
@@ -378,15 +397,46 @@ local function GetRaidRows()
     return math.ceil(memberCount / RAID_COLUMNS)
 end
 
+local function GetRaidTopInset()
+    if addon.db and addon.db.locked then
+        return 0
+    end
+    return HANDLE_HEIGHT
+end
+
 local function GetRaidFrameHeight()
     local rows = GetRaidRows()
-    return (RAID_BUTTON_HEIGHT * rows)
+    return (RAID_BUTTON_SIZE * rows)
         + (RAID_GAP * (rows - 1))
-        + HANDLE_HEIGHT
+        + GetRaidTopInset()
         + (FRAME_PADDING * 2)
 end
 
-local function RefreshRaidFrameSize()
+PositionRaidButtons = function()
+    if InCombatLockdown() then
+        addon.pendingLayoutRefresh = true
+        return
+    end
+
+    local frameInfo = addon.frames.raid
+    if not frameInfo then
+        return
+    end
+    local topInset = GetRaidTopInset()
+    for index = 1, 40 do
+        local button = addon.unitButtons["raid" .. index]
+        if button then
+            local column = (index - 1) % RAID_COLUMNS
+            local row = math.floor((index - 1) / RAID_COLUMNS)
+            local x = FRAME_PADDING + (column * (RAID_BUTTON_SIZE + RAID_GAP))
+            local y = -(topInset + FRAME_PADDING + (row * (RAID_BUTTON_SIZE + RAID_GAP)))
+            button:ClearAllPoints()
+            button:SetPoint("TOPLEFT", frameInfo.content, "TOPLEFT", x, y)
+        end
+    end
+end
+
+RefreshRaidFrameSize = function()
     local frameInfo = addon.frames.raid
     if not frameInfo then
         return
@@ -402,43 +452,39 @@ local function RefreshRaidFrameSize()
 end
 
 local function CreateRaidUI(filterString)
-    local width = (RAID_BUTTON_WIDTH * RAID_COLUMNS)
+    local width = (RAID_BUTTON_SIZE * RAID_COLUMNS)
         + (RAID_GAP * (RAID_COLUMNS - 1))
         + (FRAME_PADDING * 2)
     local height = addon.activeSpell and GetRaidFrameHeight() or EMPTY_STATE_HEIGHT
     local frameInfo = CreateRoot(
         "raid",
         "SimpleDispelRaidFrame",
-        "SimpleDispel Raid",
+        "SD",
         width,
         height,
-        "[group:raid] show; hide"
+        "[group:raid] show; hide",
+        true
     )
 
     for index = 1, 40 do
         local definition = {
             unit = "raid" .. index,
             name = "SimpleDispelRaid" .. index .. "Button",
-            label = tostring(index),
-            labelMode = "RIGHT",
-            auraWidth = RAID_BUTTON_HEIGHT,
-            auraHeight = RAID_BUTTON_HEIGHT,
-            auraAnchor = "LEFT",
+            label = "",
+            auraWidth = RAID_BUTTON_SIZE,
+            auraHeight = RAID_BUTTON_SIZE,
+            auraAnchor = "CENTER",
         }
         local button = AddUnitButton(
             frameInfo.content,
             definition,
-            RAID_BUTTON_WIDTH,
+            RAID_BUTTON_SIZE,
             filterString,
             false,
-            RAID_BUTTON_HEIGHT
+            RAID_BUTTON_SIZE
         )
-        local column = (index - 1) % RAID_COLUMNS
-        local row = math.floor((index - 1) / RAID_COLUMNS)
-        local x = FRAME_PADDING + (column * (RAID_BUTTON_WIDTH + RAID_GAP))
-        local y = -(HANDLE_HEIGHT + FRAME_PADDING + (row * (RAID_BUTTON_HEIGHT + RAID_GAP)))
-        button:SetPoint("TOPLEFT", frameInfo.content, "TOPLEFT", x, y)
     end
+    PositionRaidButtons()
 end
 
 local function UpdateDispelAvailability(spell)
@@ -447,7 +493,61 @@ local function UpdateDispelAvailability(spell)
         frameInfo.content:SetShown(hasDispel)
         frameInfo.emptyState:SetShown(not hasDispel)
     end
+    local raidFrame = addon.frames.raid
+    if raidFrame then
+        raidFrame.background:SetShown(not addon.db.locked or not hasDispel)
+    end
     RefreshRaidFrameSize()
+end
+
+local function IsAccessibleRangeValue(value)
+    if type(issecretvalue) == "function" then
+        local ok, secret = pcall(issecretvalue, value)
+        if ok and secret then
+            return false
+        end
+    end
+    if type(canaccessvalue) == "function" then
+        local ok, accessible = pcall(canaccessvalue, value)
+        if ok and not accessible then
+            return false
+        end
+    end
+    return true
+end
+
+local function IsRangeUnitActive(unit, layoutKey)
+    if layoutKey == "raid" then
+        return string.match(unit, "^raid%d+$") ~= nil
+    end
+    return unit == "player" or string.match(unit, "^party%d+$") ~= nil
+end
+
+function addon:RefreshRangeState()
+    local spell = self.activeSpell
+    local spellIdentifier = spell and (spell.name or spell.id)
+    local canCheckRange = spellIdentifier
+        and C_Spell
+        and type(C_Spell.IsSpellInRange) == "function"
+    local layoutKey = GetActiveLayoutKey()
+
+    for unit, button in pairs(self.unitButtons) do
+        local inRange
+        local unitActive = IsRangeUnitActive(unit, layoutKey)
+        local unitExists = false
+        if unitActive then
+            unitExists = unit == "player" or not UnitExists or UnitExists(unit)
+        end
+        if canCheckRange and unitActive and unitExists then
+            -- Use the same localized spell name assigned to spell1 so talent
+            -- overrides follow the exact action the secure button will cast.
+            local ok, result = pcall(C_Spell.IsSpellInRange, spellIdentifier, unit)
+            if ok and IsAccessibleRangeValue(result) then
+                inRange = result
+            end
+        end
+        self.SecureButtons:SetRangeState(button, inRange)
+    end
 end
 
 local function CreateUI()
@@ -476,6 +576,7 @@ function addon:RefreshSpell()
 
     self.activeSpell = spell
     UpdateDispelAvailability(spell)
+    self:RefreshRangeState()
     self.pendingSpellRefresh = false
     return true
 end
@@ -573,7 +674,7 @@ end
 local function HandleLockCommand(locked)
     addon.db.locked = locked
     ApplyAllFrameSettings()
-    Print(locked and "party and raid frames locked" or "frames unlocked; drag the visible title bar to move")
+    Print(locked and "party and raid frames locked" or "frames unlocked; drag the visible handle to move")
     if InCombatLockdown() then
         Print("layout will update after combat")
     end
@@ -666,7 +767,22 @@ local function RegisterSlashCommands()
 end
 
 local eventFrame = CreateFrame("Frame")
+local rangeElapsed = 0
 eventFrame:RegisterEvent("ADDON_LOADED")
+eventFrame:SetScript("OnUpdate", function(_, elapsed)
+    if not addon.activeSpell then
+        rangeElapsed = 0
+        return
+    end
+
+    rangeElapsed = rangeElapsed + (tonumber(elapsed) or 0)
+    if rangeElapsed < RANGE_UPDATE_INTERVAL then
+        return
+    end
+
+    rangeElapsed = rangeElapsed % RANGE_UPDATE_INTERVAL
+    addon:RefreshRangeState()
+end)
 eventFrame:SetScript("OnEvent", function(self, event, ...)
     if event == "ADDON_LOADED" then
         local loadedAddon = ...
@@ -708,6 +824,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
     elseif event == "GROUP_ROSTER_UPDATE" then
         UpdateGroupLabels()
         RefreshRaidFrameSize()
+        addon:RefreshRangeState()
     elseif event == "UNIT_NAME_UPDATE" then
         UpdateGroupLabels()
     elseif event == "PLAYER_REGEN_ENABLED" then

@@ -48,7 +48,25 @@ local function NewRegion()
     function region:SetColorTexture()
     end
 
-    function region:SetAlpha()
+    function region:SetAlpha(alpha)
+        self.alpha = alpha
+    end
+
+    function region:EnableMouse(enabled)
+        self.mouseEnabled = enabled
+    end
+
+    function region:SetScript(scriptName, callback)
+        self.scripts = self.scripts or {}
+        self.scripts[scriptName] = callback
+    end
+
+    function region:SetFrameLevel(level)
+        self.frameLevel = level
+    end
+
+    function region:GetFrameLevel()
+        return self.frameLevel or 1
     end
 
     function region:SetText(text)
@@ -106,6 +124,30 @@ assert(playerButton.registeredClicks[1] == "LeftButtonUp", "mouse-up registratio
 assert(playerButton.registeredClicks[2] == "LeftButtonDown", "mouse-down registration is missing")
 assert(playerButton.attributes.unit == "player", "fixed player unit is missing")
 assert(playerButton.attributes.useOnKeyDown == false, "click timing must not depend on the CVar")
+assert(playerButton.simpleDispelRangeOverlay.mouseEnabled == false, "range overlay must not intercept clicks")
+
+addon.SecureButtons:SetRangeState(playerButton, false)
+assert(playerButton.simpleDispelRangeState == "out", "false range result must be out of range")
+assert(playerButton.simpleDispelRangeShade.alpha == 0.52, "out-of-range shade is wrong")
+assert(playerButton.simpleDispelRangeMark.alpha == 1, "out-of-range non-color marker is missing")
+for _, line in ipairs(playerButton.simpleDispelRangeBorder) do
+    assert(line.alpha == 1, "out-of-range border must be visible")
+end
+
+addon.SecureButtons:SetRangeState(playerButton, true)
+assert(playerButton.simpleDispelRangeState == "in", "true range result must be in range")
+assert(playerButton.simpleDispelRangeShade.alpha == 0, "in-range button must not be shaded")
+assert(playerButton.simpleDispelRangeMark.alpha == 0, "in-range marker must be transparent")
+
+addon.SecureButtons:SetRangeState(playerButton, nil)
+assert(playerButton.simpleDispelRangeState == "unknown", "nil range result must stay unknown")
+assert(playerButton.simpleDispelRangeShade.alpha == 0, "unknown range must not be shown as out of range")
+assert(playerButton.simpleDispelRangeMark.shown == nil, "combat range refresh must not show or hide protected regions")
+
+local topFrame = NewRegion()
+topFrame.frameLevel = 7
+addon.SecureButtons:RaiseRangeOverlay(playerButton, topFrame)
+assert(playerButton.simpleDispelRangeOverlay.frameLevel == 17, "range overlay must stay above the aura frame")
 
 local spell = {
     id = 527,
@@ -139,14 +181,14 @@ local raidButton = addon.SecureButtons:Create(
     NewRegion(),
     "SimpleDispelTestRaidButton",
     "raid1",
-    "1",
-    96,
-    "RIGHT",
-    32
+    "",
+    28,
+    nil,
+    28
 )
-assert(raidButton.width == 96, "raid button width is wrong")
-assert(raidButton.height == 32, "raid button height is wrong")
-assert(raidButton.simpleDispelFallbackLabel == "1", "raid fallback label is wrong")
+assert(raidButton.width == 28, "raid button width is wrong")
+assert(raidButton.height == 28, "raid button height is wrong")
+assert(raidButton.simpleDispelFallbackLabel == "", "raid button must not keep a permanent label")
 assert(#stateDrivers == 2, "raid button must have its own visibility driver")
 assert(stateDrivers[2].conditional == "[@raid1,exists] show; hide", "raid visibility condition is wrong")
 

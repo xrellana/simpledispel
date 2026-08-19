@@ -128,10 +128,10 @@ local raidContainer, raidError = addon.AuraDisplay:Create(
     owner,
     "raid1",
     "HARMFUL|RAID",
-    { width = 32, height = 32, anchor = "LEFT", showDuration = false }
+    { width = 28, height = 28, anchor = "CENTER", showDuration = false }
 )
 assert(raidContainer, tostring(raidError))
-assert(initializedAuraButton.width == 32, "rectangular owner aura width is wrong")
-assert(initializedAuraButton.height == 32, "rectangular owner aura height is wrong")
+assert(initializedAuraButton.width == 28, "compact raid aura width is wrong")
+assert(initializedAuraButton.height == 28, "compact raid aura height is wrong")
 
 print("SimpleDispel aura input propagation: PASS")

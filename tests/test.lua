@@ -5,6 +5,15 @@ local inRaid = false
 local inCombat = false
 local groupMemberCount = 0
 local resolvedSpell = { id = 527, name = "Purify", icon = 1, known = true, source = "auto" }
+local rangeByUnit = {
+    player = true,
+    party1 = false,
+    party2 = nil,
+    party3 = true,
+    party4 = true,
+    raid1 = false,
+}
+local rangeCalls = {}
 
 local objectMethods = {}
 
@@ -38,6 +47,22 @@ end
 
 function objectMethods:SetShown(shown)
     self.shown = shown
+end
+
+function objectMethods:Show()
+    self.shown = true
+end
+
+function objectMethods:Hide()
+    self.shown = false
+end
+
+function objectMethods:EnableMouse(enabled)
+    self.mouseEnabled = enabled
+end
+
+function objectMethods:SetAlpha(alpha)
+    self.alpha = alpha
 end
 
 function objectMethods:SetScript(scriptName, callback)
@@ -117,6 +142,21 @@ function GetNumGroupMembers()
     return groupMemberCount
 end
 
+function UnitExists(unit)
+    if unit == "player" then
+        return true
+    end
+    local partyIndex = string.match(unit, "^party(%d+)$")
+    if partyIndex then
+        return tonumber(partyIndex) <= 4
+    end
+    local raidIndex = string.match(unit, "^raid(%d+)$")
+    if raidIndex then
+        return inRaid and tonumber(raidIndex) <= groupMemberCount
+    end
+    return false
+end
+
 function GetBuildInfo()
     return "12.1.0", "12345", "Aug 2026", 120100
 end
@@ -126,6 +166,13 @@ C_AddOns = {
         if field == "Version" then
             return "1.0.0"
         end
+    end,
+}
+
+C_Spell = {
+    IsSpellInRange = function(spellIdentifier, unit)
+        rangeCalls[#rangeCalls + 1] = { spellIdentifier = spellIdentifier, unit = unit }
+        return rangeByUnit[unit]
     end,
 }
 
@@ -163,12 +210,25 @@ addon.SecureButtons = {
         button.labelMode = labelMode
         button.simpleDispelFallbackLabel = label
         button.simpleDispelLabel = {
+            text = label,
             SetText = function(self, text)
                 self.text = text
             end,
         }
         createdButtons[#createdButtons + 1] = button
         return button
+    end,
+    RaiseRangeOverlay = function(_, button)
+        button.rangeOverlayRaised = true
+    end,
+    SetRangeState = function(_, button, inRange)
+        if inRange == true then
+            button.simpleDispelRangeState = "in"
+        elseif inRange == false then
+            button.simpleDispelRangeState = "out"
+        else
+            button.simpleDispelRangeState = "unknown"
+        end
     end,
     SetSpell = function(_, button, spell)
         button.spell = spell
@@ -232,24 +292,28 @@ assert(createdButtons[6].unit == "raid1", "first raid unit must be raid1")
 assert(createdButtons[45].unit == "raid40", "last raid unit must be raid40")
 assert(createdButtons[1].requestedWidth == 48, "party button width is wrong")
 assert(createdButtons[1].requestedHeight == 48, "party button height is wrong")
-assert(createdButtons[6].requestedWidth == 96, "raid button width is wrong")
-assert(createdButtons[6].requestedHeight == 32, "raid button height is wrong")
+assert(createdButtons[6].requestedWidth == 28, "raid button width is wrong")
+assert(createdButtons[6].requestedHeight == 28, "raid button height is wrong")
 assert(#addon.auraContainers == 45, "every unit must get one aura container")
 assert(createdButtons[2].simpleDispelLabel.text == "Alice", "party1 name label was not updated")
 assert(createdButtons[5].simpleDispelLabel.text == "Dora", "party4 name label was not updated")
-assert(createdButtons[6].simpleDispelLabel.text == "RaidAlice", "raid1 name label was not updated")
-assert(createdButtons[45].simpleDispelLabel.text == "RaidZed", "raid40 name label was not updated")
-assert(createdButtons[6].labelMode == "RIGHT", "raid name must be placed beside the icon")
-assert(addon.auraContainers[6].options.width == 32, "raid aura width is wrong")
-assert(addon.auraContainers[6].options.height == 32, "raid aura height is wrong")
-assert(addon.auraContainers[6].options.anchor == "LEFT", "raid aura must be left-aligned")
+assert(createdButtons[6].simpleDispelLabel.text == "", "raid1 must not keep a permanent name")
+assert(createdButtons[45].simpleDispelLabel.text == "", "raid40 must not keep a permanent name")
+assert(rawget(createdButtons[6], "labelMode") == nil, "compact raid button must not reserve a name area")
+assert(addon.auraContainers[6].options.width == 28, "raid aura width is wrong")
+assert(addon.auraContainers[6].options.height == 28, "raid aura height is wrong")
+assert(addon.auraContainers[6].options.anchor == "CENTER", "raid aura must fill the compact square")
+assert(createdButtons[6].rangeOverlayRaised, "range overlay must be raised above the aura")
 
 local raid1Point = createdButtons[6].point
-local raid5Point = createdButtons[10].point
-local raid6Point = createdButtons[11].point
-assert(raid1Point[4] == raid6Point[4], "raid1 and raid6 must stay in the first column")
-assert(raid1Point[5] == raid5Point[5], "raid1 through raid5 must stay in the first row")
-assert(raid6Point[5] < raid1Point[5], "raid6 must start the second row")
+local raid8Point = createdButtons[13].point
+local raid9Point = createdButtons[14].point
+local raid40Point = createdButtons[45].point
+assert(raid1Point[5] == raid8Point[5], "raid1 through raid8 must stay in the first row")
+assert(raid1Point[4] == raid9Point[4], "raid9 must return to the first column")
+assert(raid9Point[5] < raid1Point[5], "raid9 must start the second row")
+assert(raid40Point[4] == raid8Point[4], "raid40 must stay in the eighth column")
+assert(raid40Point[5] < raid9Point[5], "raid40 must stay in the fifth row")
 
 local partyVisibility
 local raidVisibility
@@ -264,6 +328,9 @@ for _, driver in ipairs(stateDrivers) do
 end
 assert(partyVisibility == "[group:raid] hide; show", "party visibility driver is wrong")
 assert(raidVisibility == "[group:raid] show; hide", "raid visibility driver is wrong")
+assert(raidRoot.width == 246, "compact raid frame width is wrong")
+assert(addon.frames.raid.dragHandle.width == 28, "raid drag handle must stay compact")
+assert(addon.frames.raid.dragHandle.height == 22, "raid drag handle height is wrong")
 
 eventFrame.scripts.OnEvent(eventFrame, "PLAYER_LOGIN")
 assert(addon.activeSpell and addon.activeSpell.id == 527, "spell was not assigned at login")
@@ -272,6 +339,18 @@ assert(addon.frames.party.content.shown == true, "party buttons must be shown wh
 assert(addon.frames.party.emptyState.shown == false, "party empty state must be hidden when a dispel is available")
 assert(addon.frames.raid.content.shown == true, "raid buttons must be shown when a dispel is available")
 assert(addon.frames.raid.emptyState.shown == false, "raid empty state must be hidden when a dispel is available")
+assert(createdButtons[1].simpleDispelRangeState == "in", "player range state is wrong")
+assert(createdButtons[2].simpleDispelRangeState == "out", "party1 range state is wrong")
+assert(createdButtons[3].simpleDispelRangeState == "unknown", "nil range must stay unknown")
+
+rangeCalls = {}
+rangeByUnit.party1 = true
+eventFrame.scripts.OnUpdate(eventFrame, 0.24)
+assert(#rangeCalls == 0, "range refresh ran before 0.25 seconds")
+eventFrame.scripts.OnUpdate(eventFrame, 0.01)
+assert(#rangeCalls == 5, "party range refresh must query five existing units")
+assert(rangeCalls[1].spellIdentifier == "Purify", "range check must use the secure button's actual spell")
+assert(createdButtons[2].simpleDispelRangeState == "in", "periodic range refresh did not update party1")
 
 resolvedSpell = nil
 inCombat = true
@@ -286,6 +365,9 @@ assert(addon.frames.party.emptyState.shown == true, "party empty state must expl
 assert(addon.frames.raid.content.shown == false, "raid buttons must be hidden without a dispel")
 assert(addon.frames.raid.emptyState.shown == true, "raid empty state must explain the missing dispel")
 assert(addon.frames.raid.root.height == 70, "raid empty state must use a compact height")
+rangeCalls = {}
+eventFrame.scripts.OnUpdate(eventFrame, 1)
+assert(#rangeCalls == 0, "range refresh must stop without an active dispel")
 
 resolvedSpell = { id = 527, name = "Purify", icon = 1, known = true, source = "auto" }
 eventFrame.scripts.OnEvent(eventFrame, "PLAYER_SPECIALIZATION_CHANGED")
@@ -298,17 +380,38 @@ assert(SimpleDispelDB.layouts.raid.scale == 0.75, "explicit raid scale command f
 
 inRaid = true
 local raidHeightCases = {
-    { members = 10, height = 98 },
-    { members = 20, height = 170 },
-    { members = 30, height = 242 },
-    { members = 40, height = 314 },
-    { members = 25, height = 206 },
+    { members = 1, height = 58 },
+    { members = 8, height = 58 },
+    { members = 9, height = 88 },
+    { members = 16, height = 88 },
+    { members = 17, height = 118 },
+    { members = 25, height = 148 },
+    { members = 32, height = 148 },
+    { members = 33, height = 178 },
+    { members = 40, height = 178 },
+    { members = 25, height = 148 },
 }
 for _, case in ipairs(raidHeightCases) do
     groupMemberCount = case.members
     eventFrame.scripts.OnEvent(eventFrame, "GROUP_ROSTER_UPDATE")
     assert(raidRoot.height == case.height, case.members .. "-player raid frame height is wrong")
 end
+assert(createdButtons[6].simpleDispelRangeState == "out", "raid1 range state was not refreshed")
+assert(createdButtons[31].simpleDispelRangeState == "unknown", "missing raid units must not keep a stale range state")
+
+local unlockedRaidY = createdButtons[6].point[5]
+SlashCmdList.SIMPLEDISPEL("lock")
+assert(SimpleDispelDB.locked == true, "lock command did not persist")
+assert(addon.frames.raid.dragHandle.shown == false, "locked raid handle must be hidden")
+assert(addon.frames.raid.background.shown == false, "locked raid background must be hidden")
+assert(raidRoot.height == 126, "locked 25-player raid height is wrong")
+assert(createdButtons[6].point[5] == -4, "locked raid grid must move into the former title space")
+SlashCmdList.SIMPLEDISPEL("unlock")
+assert(SimpleDispelDB.locked == false, "unlock command did not persist")
+assert(addon.frames.raid.dragHandle.shown == true, "unlocked raid handle must be visible")
+assert(addon.frames.raid.background.shown == true, "unlocked raid background must be visible")
+assert(raidRoot.height == 148, "unlocked 25-player raid height is wrong")
+assert(createdButtons[6].point[5] == unlockedRaidY, "unlock must restore the raid grid offset")
 SlashCmdList.SIMPLEDISPEL("scale 0.80")
 assert(SimpleDispelDB.layouts.raid.scale == 0.80, "active raid scale command failed")
 
@@ -320,13 +423,13 @@ inCombat = true
 groupMemberCount = 40
 eventFrame.scripts.OnEvent(eventFrame, "GROUP_ROSTER_UPDATE")
 assert(addon.pendingRaidSizeRefresh, "combat raid resize was not deferred")
-assert(raidRoot.height == 206, "raid frame resized during combat")
+assert(raidRoot.height == 148, "raid frame resized during combat")
 SlashCmdList.SIMPLEDISPEL("scale raid 0.85")
 assert(addon.pendingLayoutRefresh, "combat layout update was not deferred")
 inCombat = false
 eventFrame.scripts.OnEvent(eventFrame, "PLAYER_REGEN_ENABLED")
 assert(not addon.pendingLayoutRefresh, "deferred layout update was not applied")
 assert(not addon.pendingRaidSizeRefresh, "deferred raid resize was not applied")
-assert(raidRoot.height == 314, "40-player raid frame must use eight rows")
+assert(raidRoot.height == 178, "40-player raid frame must use five rows")
 
 print("SimpleDispel mock runtime: PASS")

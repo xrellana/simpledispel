@@ -74,7 +74,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          archive="SimpleDispel-${ADDON_VERSION}.zip"
+          archive="SimpleDispel-${RELEASE_TAG}.zip"
           mkdir -p dist/SimpleDispel
           install -m 0644 ./*.lua ./*.toc dist/SimpleDispel/
           (cd dist && zip -r "../${archive}" SimpleDispel)

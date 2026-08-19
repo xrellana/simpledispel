@@ -34,8 +34,9 @@ The addon does **not** provide an automatic dispel decision engine. It does not 
 ## Features
 
 - Compact five-slot solo/party layout.
-- Raid layout with five columns and up to forty fixed unit slots.
-- Direct display of current party and raid member names.
+- Raid layout with eight columns, up to five rows, and forty fixed unit slots.
+- Direct display of current party member names; raid members are identified by the normal unit-button tooltip.
+- Raid range feedback for the currently selected friendly-dispel spell, without disabling clicks.
 - Native aura icon, application count, tooltip, and cooldown display where supported by the client.
 - A separate Aura Container for every pre-created unit slot.
 - Secure unit-button actions that remain bound to fixed unit tokens.
@@ -70,16 +71,26 @@ The raid layout pre-creates the following fixed unit tokens:
 
 - `raid1` through `raid40`
 
-Raid entries are arranged in five columns. The frame uses only as many rows as the current roster requires, up to eight rows for a forty-player raid. Each entry is 96 × 32 pixels by default:
+Raid entries are arranged in eight columns. The frame uses only as many rows as the current roster requires, up to five rows for a forty-player raid. Each entry is a compact 28 × 28 pixel square by default:
 
-- A 32-pixel aura area is shown on the left.
-- The corresponding member name is shown on the right.
+- The filtered aura icon fills the square.
+- Member names are not shown persistently; hover the normal unit button for the client tooltip when identification is needed.
 - Only units that currently exist are shown.
 - The player appears once in the `raidN` roster and is not displayed again as a separate `YOU` slot.
 
-The raid roster remains in Blizzard’s fixed `raidN` order. SimpleDispel does not reorder members by name, class, role, group, or debuff priority. The displayed name is for identification only; it is never parsed or used to make a combat decision.
+The raid roster remains in Blizzard’s fixed `raidN` order. SimpleDispel does not reorder members by name, class, role, group, or debuff priority. The tooltip is for identification only; it is never parsed or used to make a combat decision.
 
-During combat, a roster change may temporarily leave the raid frame at its previous height. The frame is resized after combat ends, when protected layout changes are safe.
+When the raid layout is locked, its title and large background are hidden and the grid is moved upward. Unlocking reveals the small `SD` drag anchor for positioning. During combat, a roster change may temporarily leave the raid frame at its previous height. The frame is resized after combat ends, when protected layout changes are safe.
+
+### Range feedback
+
+For the currently selected friendly-dispel spell, SimpleDispel checks the client’s `C_Spell.IsSpellInRange` result for each existing unit approximately every 0.25 seconds:
+
+- `true`: the square keeps its normal appearance.
+- `false`: the square receives a dark overlay, red border, and `×` marker so that out-of-range targets are obvious.
+- `nil`: the range state is unknown, so the square keeps a neutral appearance rather than being reported as out of range.
+
+Range feedback is visual guidance only. It does not disable or hide the click action, cannot determine line of sight, and may briefly lag behind movement or other client state changes.
 
 ## Installation
 
@@ -144,14 +155,14 @@ The repository contains development documents and mock tests in addition to the 
    /sd unlock
    ~~~
 
-5. Drag the title bar of the currently visible layout.
+5. Drag the Party title bar or the Raid layout's small `SD` anchor.
 6. Lock the frames when the position is correct:
 
    ~~~text
    /sd lock
    ~~~
 
-Both party and raid positions are saved independently. Scale values are also saved independently.
+Both party and raid positions are saved independently. Scale values are also saved independently. When locked, the raid title bar and large background are hidden and the raid grid moves up into the freed space; unlocking shows the small `SD` drag anchor again.
 
 Layout movement, scale changes, spell-attribute changes, and raid frame resizing are subject to combat lockdown. If a change is requested during combat, SimpleDispel defers the protected update until combat ends.
 
@@ -163,7 +174,7 @@ Both `/sd` and `/simpledispel` are registered as command aliases.
 |---|---|
 | `/sd status` | Print addon version, client/build information, active mode, Aura Container support, filter, button/container counts, saved scales, and active spell information. |
 | `/sd lock` | Lock both layouts and disable dragging. |
-| `/sd unlock` | Unlock both layouts so the visible title bar can be dragged. |
+| `/sd unlock` | Unlock both layouts; drag the Party title bar or the Raid `SD` anchor. |
 | `/sd scale <0.60-2.00>` | Set the scale of the currently active layout. |
 | `/sd scale party <0.60-2.00>` | Set the party layout scale explicitly. |
 | `/sd scale raid <0.60-2.00>` | Set the raid layout scale explicitly. |
@@ -253,7 +264,7 @@ SimpleDispel is designed around the restrictions introduced by the Retail 12.1 a
 
 ### Display-only names
 
-Party and raid names are passed directly to display text fields. They are not:
+Party names are passed directly to display text fields. Raid names are provided by the normal unit-button tooltip instead of a persistent text field. Neither display path is:
 
 - Compared or sorted.
 - Truncated or transformed for logic.
@@ -276,9 +287,9 @@ The repository contains two types of testing material.
 
 The files under [tests](tests) simulate enough of the WoW API to exercise the addon’s structural behavior without launching the game:
 
-- [tests/test.lua](tests/test.lua) checks SavedVariables migration, creation of five party and forty raid buttons, Aura Container creation, name display, grid placement, visibility drivers, raid height calculation, scale commands, reset behavior, and combat-deferred updates.
+- [tests/test.lua](tests/test.lua) checks SavedVariables migration, creation of five party and forty raid buttons, Aura Container creation, unit-button setup, grid placement, visibility drivers, raid height calculation, scale commands, reset behavior, and combat-deferred updates.
 - [tests/dispel_spells_test.lua](tests/dispel_spells_test.lua) checks class spell detection, known manual overrides, cross-character override fallback, and classes without a friendly dispel.
-- [tests/secure_button_test.lua](tests/secure_button_test.lua) checks fixed unit attributes, secure click registration, spell attributes, and party/raid visibility drivers.
+- [tests/secure_button_test.lua](tests/secure_button_test.lua) checks fixed unit attributes, secure click registration, spell attributes, range-overlay states, and party/raid visibility drivers.
 - [tests/aura_input_test.lua](tests/aura_input_test.lua) checks Aura Button initialization, icon sizing, duration/cooldown setup, native mouse motion, and click propagation.
 
 These tests are mock-runtime tests. They are useful for catching regressions in layout and setup logic, but they cannot prove that the live game will accept a protected action, avoid taint, or behave correctly in every combat scenario.
@@ -294,8 +305,9 @@ Before testing in a dungeon or raid:
 3. Confirm the reported client build, active mode, Aura Container status, filter, and selected spell.
 4. Test a low-risk scenario first.
 5. Check that the correct unit is dispelled without changing the current target.
-6. Test party and raid roster changes, combat entry and exit, death, leaving range, cooldowns, and missing spells.
-7. Watch for `ADDON_ACTION_FORBIDDEN`, secret-value errors, forbidden-frame errors, taint, click-through failures, and sustained performance problems.
+6. Test party and raid roster changes, combat entry and exit, death, moving into and out of dispel range, cooldowns, and missing spells.
+7. Confirm that in-range squares look normal, out-of-range squares show the dark overlay/red border/`×`, and an unknown (`nil`) result remains neutral. Confirm that range feedback never disables a click and that line-of-sight failures are not treated as a range result.
+8. Watch for `ADDON_ACTION_FORBIDDEN`, secret-value errors, forbidden-frame errors, taint, click-through failures, and sustained performance problems.
 
 The detailed test matrix and issue-report template are in [BETA_TESTING.md](BETA_TESTING.md). The earlier Aura Container and secure-click prototype procedure is in [STAGE1_TESTING.md](STAGE1_TESTING.md).
 
@@ -305,7 +317,8 @@ The detailed test matrix and issue-report template are in [BETA_TESTING.md](BETA
 - Only one system-filtered harmful aura is displayed per unit.
 - The addon does not automatically choose the most urgent or most valuable dispel target.
 - The player must click the relevant unit frame; there is no automatic casting.
-- Raid entries use fixed `raid1`-`raid40` order and are not sorted by class, role, name, group, or debuff.
+- Raid entries are fixed 28 × 28 pixel squares in `raid1`-`raid40` order, arranged as eight columns and at most five rows; they are not sorted by class, role, name, group, or debuff. Member identification is provided by the normal unit-button tooltip rather than a persistent name.
+- Range checks use the currently selected friendly-dispel spell and refresh approximately every 0.25 seconds. The `C_Spell.IsSpellInRange` result can be delayed or `nil`; the indicator cannot determine line of sight and never disables clicking.
 - The raid frame can temporarily retain its old height when the roster changes during combat; it is resized after combat.
 - Layout movement and protected spell changes are unavailable during combat and are deferred until combat ends.
 - Automatic spell selection currently covers the classes and candidate spells listed above. Other situations may require a manual spell override.
