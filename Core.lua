@@ -36,6 +36,7 @@ addon.unitButtons = {}
 addon.pendingSpellRefresh = false
 addon.pendingLayoutRefresh = false
 addon.pendingRaidSizeRefresh = false
+addon.dispelCooldownActive = nil
 
 local PositionRaidButtons
 local RefreshRaidFrameSize
@@ -500,7 +501,7 @@ local function UpdateDispelAvailability(spell)
     RefreshRaidFrameSize()
 end
 
-local function IsAccessibleRangeValue(value)
+local function IsAccessibleValue(value)
     if type(issecretvalue) == "function" then
         local ok, secret = pcall(issecretvalue, value)
         if ok and secret then
@@ -542,12 +543,55 @@ function addon:RefreshRangeState()
             -- Use the same localized spell name assigned to spell1 so talent
             -- overrides follow the exact action the secure button will cast.
             local ok, result = pcall(C_Spell.IsSpellInRange, spellIdentifier, unit)
-            if ok and IsAccessibleRangeValue(result) then
+            if ok and IsAccessibleValue(result) then
                 inRange = result
             end
         end
         self.SecureButtons:SetRangeState(button, inRange)
     end
+end
+
+function addon:RefreshCooldownState(fromCooldownEvent)
+    local spell = self.activeSpell
+    local onCooldown = self.dispelCooldownActive
+
+    if not spell then
+        onCooldown = nil
+    elseif C_Spell and type(C_Spell.GetSpellCooldown) == "function" then
+        -- Match the localized spell name assigned to the secure action so
+        -- talent overrides report the cooldown of the action actually cast.
+        local spellIdentifier = spell.name or spell.id
+        local ok, cooldownInfo = pcall(C_Spell.GetSpellCooldown, spellIdentifier)
+        if ok and type(cooldownInfo) == "table" then
+            local isActive = cooldownInfo.isActive
+            if IsAccessibleValue(isActive) and type(isActive) == "boolean" then
+                if not isActive then
+                    onCooldown = false
+                elseif fromCooldownEvent then
+                    -- isOnGCD is documented as reliable while responding to
+                    -- SPELL_UPDATE_COOLDOWN. Do not dim the dispel UI for an
+                    -- unrelated global cooldown.
+                    local isOnGCD = cooldownInfo.isOnGCD
+                    if IsAccessibleValue(isOnGCD) and type(isOnGCD) == "boolean" then
+                        onCooldown = not isOnGCD
+                    end
+                -- A non-event active result never establishes a new cooldown:
+                -- isOnGCD is not reliable here, so ready/unknown is retained
+                -- until SPELL_UPDATE_COOLDOWN supplies the distinction.
+                elseif self.dispelCooldownActive == true then
+                    -- No event is guaranteed when a normal cooldown reaches
+                    -- zero. Poll only to retain/clear an already-known state.
+                    onCooldown = true
+                end
+            end
+        end
+    end
+
+    self.dispelCooldownActive = onCooldown
+    for _, button in ipairs(self.buttons) do
+        self.SecureButtons:SetCooldownState(button, onCooldown)
+    end
+    return onCooldown
 end
 
 local function CreateUI()
@@ -569,14 +613,23 @@ function addon:RefreshSpell()
         return false
     end
 
+    local previousSpell = self.activeSpell
     local spell = self.Spells:Resolve()
     for _, button in ipairs(self.buttons) do
         self.SecureButtons:SetSpell(button, spell)
     end
 
+    local sameSpell = previousSpell
+        and spell
+        and previousSpell.id == spell.id
+        and previousSpell.name == spell.name
     self.activeSpell = spell
+    if not sameSpell then
+        self.dispelCooldownActive = nil
+    end
     UpdateDispelAvailability(spell)
     self:RefreshRangeState()
+    self:RefreshCooldownState(false)
     self.pendingSpellRefresh = false
     return true
 end
@@ -609,12 +662,19 @@ local function PrintStatus()
     ))
 
     if spell then
+        local cooldownStatus = "unknown"
+        if addon.dispelCooldownActive == true then
+            cooldownStatus = "cooldown"
+        elseif addon.dispelCooldownActive == false then
+            cooldownStatus = "ready"
+        end
         Print(string.format(
-            "spell=%s (%d), source=%s, spellbookKnown=%s",
+            "spell=%s (%d), source=%s, spellbookKnown=%s, cooldown=%s",
             spell.name,
             spell.id,
             tostring(spell.source),
-            tostring(spell.known)
+            tostring(spell.known),
+            cooldownStatus
         ))
     else
         Print("spell=none; use /sd spell <spellID> to set an out-of-combat override")
@@ -782,6 +842,7 @@ eventFrame:SetScript("OnUpdate", function(_, elapsed)
 
     rangeElapsed = rangeElapsed % RANGE_UPDATE_INTERVAL
     addon:RefreshRangeState()
+    addon:RefreshCooldownState(false)
 end)
 eventFrame:SetScript("OnEvent", function(self, event, ...)
     if event == "ADDON_LOADED" then
@@ -802,6 +863,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         self:RegisterEvent("PLAYER_REGEN_ENABLED")
         self:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
         self:RegisterEvent("SPELLS_CHANGED")
+        self:RegisterEvent("SPELL_UPDATE_COOLDOWN")
         self:RegisterEvent("TRAIT_CONFIG_UPDATED")
         return
     end
@@ -839,6 +901,8 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         if addon.pendingRaidSizeRefresh then
             RefreshRaidFrameSize()
         end
+    elseif event == "SPELL_UPDATE_COOLDOWN" then
+        addon:RefreshCooldownState(true)
     elseif event == "PLAYER_SPECIALIZATION_CHANGED"
         or event == "SPELLS_CHANGED"
         or event == "TRAIT_CONFIG_UPDATED" then

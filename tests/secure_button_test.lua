@@ -145,6 +145,7 @@ assert(playerButton.registeredClicks[2] == "LeftButtonDown", "mouse-down registr
 assert(playerButton.attributes.unit == "player", "fixed player unit is missing")
 assert(playerButton.attributes.useOnKeyDown == false, "click timing must not depend on the CVar")
 assert(playerButton.simpleDispelRangeOverlay.mouseEnabled == false, "range overlay must not intercept clicks")
+assert(playerButton.simpleDispelCooldownMark.alpha == 0, "cooldown marker must start transparent")
 
 playerButton.scripts.OnEnter(playerButton)
 assert(#tooltipAnchorCalls == 1, "unit tooltip must use the default game anchor")
@@ -168,10 +169,30 @@ assert(playerButton.simpleDispelRangeState == "in", "true range result must be i
 assert(playerButton.simpleDispelRangeShade.alpha == 0, "in-range button must not be shaded")
 assert(playerButton.simpleDispelRangeMark.alpha == 0, "in-range marker must be transparent")
 
+addon.SecureButtons:SetCooldownState(playerButton, true)
+assert(playerButton.simpleDispelCooldownState == "cooldown", "active cooldown state is wrong")
+assert(playerButton.simpleDispelRangeShade.alpha == 0.32, "cooldown shade is wrong")
+assert(playerButton.simpleDispelCooldownMark.alpha == 1, "cooldown marker must be visible")
+
+addon.SecureButtons:SetRangeState(playerButton, false)
+assert(playerButton.simpleDispelRangeShade.alpha == 0.52, "range shade must take visual priority")
+assert(playerButton.simpleDispelRangeMark.alpha == 1, "range marker must remain visible during cooldown")
+assert(playerButton.simpleDispelCooldownMark.alpha == 1, "cooldown marker must coexist with range")
+
+addon.SecureButtons:SetRangeState(playerButton, true)
+addon.SecureButtons:SetCooldownState(playerButton, false)
+assert(playerButton.simpleDispelCooldownState == "ready", "ready cooldown state is wrong")
+assert(playerButton.simpleDispelRangeShade.alpha == 0, "ready in-range button must not be shaded")
+assert(playerButton.simpleDispelCooldownMark.alpha == 0, "ready cooldown marker must be transparent")
+
 addon.SecureButtons:SetRangeState(playerButton, nil)
 assert(playerButton.simpleDispelRangeState == "unknown", "nil range result must stay unknown")
 assert(playerButton.simpleDispelRangeShade.alpha == 0, "unknown range must not be shown as out of range")
 assert(playerButton.simpleDispelRangeMark.shown == nil, "combat range refresh must not show or hide protected regions")
+
+addon.SecureButtons:SetCooldownState(playerButton, nil)
+assert(playerButton.simpleDispelCooldownState == "unknown", "nil cooldown must stay unknown")
+assert(playerButton.simpleDispelCooldownMark.shown == nil, "combat cooldown refresh must not show or hide protected regions")
 
 local topFrame = NewRegion()
 topFrame.frameLevel = 7

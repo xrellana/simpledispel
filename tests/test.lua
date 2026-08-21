@@ -14,6 +14,11 @@ local rangeByUnit = {
     raid1 = false,
 }
 local rangeCalls = {}
+local cooldownInfo = {
+    isActive = false,
+    isOnGCD = false,
+}
+local cooldownCalls = {}
 
 local objectMethods = {}
 
@@ -174,6 +179,10 @@ C_Spell = {
         rangeCalls[#rangeCalls + 1] = { spellIdentifier = spellIdentifier, unit = unit }
         return rangeByUnit[unit]
     end,
+    GetSpellCooldown = function(spellIdentifier)
+        cooldownCalls[#cooldownCalls + 1] = spellIdentifier
+        return cooldownInfo
+    end,
 }
 
 SimpleDispelDB = {
@@ -228,6 +237,15 @@ addon.SecureButtons = {
             button.simpleDispelRangeState = "out"
         else
             button.simpleDispelRangeState = "unknown"
+        end
+    end,
+    SetCooldownState = function(_, button, onCooldown)
+        if onCooldown == true then
+            button.simpleDispelCooldownState = "cooldown"
+        elseif onCooldown == false then
+            button.simpleDispelCooldownState = "ready"
+        else
+            button.simpleDispelCooldownState = "unknown"
         end
     end,
     SetSpell = function(_, button, spell)
@@ -285,6 +303,7 @@ assert(SimpleDispelDB.schemaVersion == 3, "database schema was not upgraded")
 assert(SimpleDispelDB.layouts.party.scale == 0.90, "party scale migration failed")
 assert(SimpleDispelDB.layouts.party.position.x == 17, "party position migration failed")
 assert(SimpleDispelDB.layouts.raid.scale == 1.00, "raid default scale is wrong")
+assert(eventFrame.events.SPELL_UPDATE_COOLDOWN, "spell cooldown event was not registered")
 assert(#createdButtons == 45, "expected 5 party and 40 raid buttons")
 assert(createdButtons[1].unit == "player", "first party unit must be player")
 assert(createdButtons[5].unit == "party4", "fifth party unit must be party4")
@@ -342,7 +361,25 @@ assert(addon.frames.raid.emptyState.shown == false, "raid empty state must be hi
 assert(createdButtons[1].simpleDispelRangeState == "in", "player range state is wrong")
 assert(createdButtons[2].simpleDispelRangeState == "out", "party1 range state is wrong")
 assert(createdButtons[3].simpleDispelRangeState == "unknown", "nil range must stay unknown")
+assert(createdButtons[1].simpleDispelCooldownState == "ready", "dispel must start ready")
 
+cooldownInfo = { isActive = true, isOnGCD = true }
+addon.dispelCooldownActive = nil
+addon:RefreshCooldownState(false)
+assert(createdButtons[1].simpleDispelCooldownState == "unknown", "non-event GCD state must remain unknown")
+eventFrame.scripts.OnEvent(eventFrame, "SPELL_UPDATE_COOLDOWN", 61304)
+assert(createdButtons[1].simpleDispelCooldownState == "ready", "global cooldown must not dim dispels")
+
+cooldownInfo = { isActive = true, isOnGCD = false }
+inCombat = true
+eventFrame.scripts.OnEvent(eventFrame, "SPELL_UPDATE_COOLDOWN", 527)
+assert(createdButtons[1].simpleDispelCooldownState == "cooldown", "real dispel cooldown was not shown")
+assert(createdButtons[45].simpleDispelCooldownState == "cooldown", "raid cooldown state was not synchronized")
+assert(addon.frames.party.content.shown == true, "cooldown must not hide dispellable units")
+assert(cooldownCalls[#cooldownCalls] == "Purify", "cooldown query must use the secure dispel spell")
+inCombat = false
+
+cooldownInfo = nil
 rangeCalls = {}
 rangeByUnit.party1 = true
 eventFrame.scripts.OnUpdate(eventFrame, 0.24)
@@ -351,6 +388,13 @@ eventFrame.scripts.OnUpdate(eventFrame, 0.01)
 assert(#rangeCalls == 5, "party range refresh must query five existing units")
 assert(rangeCalls[1].spellIdentifier == "Purify", "range check must use the secure button's actual spell")
 assert(createdButtons[2].simpleDispelRangeState == "in", "periodic range refresh did not update party1")
+assert(createdButtons[1].simpleDispelCooldownState == "cooldown", "unknown cooldown result must preserve confirmed state")
+
+cooldownInfo = { isActive = false, isOnGCD = false }
+eventFrame.scripts.OnUpdate(eventFrame, 0.24)
+assert(createdButtons[1].simpleDispelCooldownState == "cooldown", "cooldown cleared before the polling interval")
+eventFrame.scripts.OnUpdate(eventFrame, 0.01)
+assert(createdButtons[1].simpleDispelCooldownState == "ready", "cooldown polling did not restore readiness")
 
 resolvedSpell = nil
 inCombat = true
@@ -365,6 +409,7 @@ assert(addon.frames.party.emptyState.shown == true, "party empty state must expl
 assert(addon.frames.raid.content.shown == false, "raid buttons must be hidden without a dispel")
 assert(addon.frames.raid.emptyState.shown == true, "raid empty state must explain the missing dispel")
 assert(addon.frames.raid.root.height == 70, "raid empty state must use a compact height")
+assert(createdButtons[1].simpleDispelCooldownState == "unknown", "missing dispel must clear cooldown state")
 rangeCalls = {}
 eventFrame.scripts.OnUpdate(eventFrame, 1)
 assert(#rangeCalls == 0, "range refresh must stop without an active dispel")

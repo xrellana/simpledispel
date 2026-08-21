@@ -38,6 +38,8 @@ SimpleDispel 的“一键驱散”是：插件为固定 unit token 创建成员�
 - Party/Raid 成员显示和布局变化使用安全状态驱动；战斗中的非安全更新进入脱战队列。
 - 范围提示只针对当前实际选中的友方驱散 spell，通过 `C_Spell.IsSpellInRange` 检查现存 unit，约每 0.25 秒刷新；它只改变普通视觉层，不禁用安全点击。
 - `IsSpellInRange` 返回 `true` 时保持正常外观，`false` 时显示暗色遮罩、红边和 `×`，`nil` 时保持中性；范围提示不判断 LoS，并允许客户端刷新延迟。
+- 驱散技能冷却通过 `C_Spell.GetSpellCooldown` 的非 secret 状态字段显示；实际技能 CD 使用中性暗层和琥珀色 `CD`，普通 GCD 不触发提示，且不读取受限的精确剩余时间。
+- 冷却与范围提示共用合成后的视觉层：范围外保留红边和 `×`，冷却标记可同时出现，暗层不重复叠加；两种提示都不隐藏 debuff、不禁用安全点击。
 - 若官方 API 不支持某项功能，应停止该项或记录降级，不使用 taint、hook、时序漏洞或污染安全路径绕过限制。
 
 ## 4. 当前实际文件结构
@@ -69,6 +71,7 @@ SimpleDispel 的“一键驱散”是：插件为固定 unit token 创建成员�
 | 每个单位一个 Aura Container | 代码已实现；mock 已覆盖 | `AuraDisplay.lua:104-164`；`Core.lua:241-273`；`tests/test.lua:232` | 当前创建 45 个容器。 |
 | 系统过滤 aura、图标、cooldown、层数、可选持续时间 | 代码已实现；仅部分初始化由 mock 覆盖 | `AuraDisplay.lua:8-12,14-84`；`tests/aura_input_test.lua:111-137` | mock 只覆盖部分初始化调用；过滤器实际语义、tooltip、驱散类型边框和真实客户端显示仍待正式服确认。 |
 | 驱散范围视觉提示 | 代码已实现；正式服待验证 | `Core.lua`；`C_Spell.IsSpellInRange` | 使用当前实际驱散 spell，约每 0.25 秒刷新；`true` 正常、`false` 暗色遮罩+红边+`×`、`nil` 中性。只提示不禁用点击，不能判断 LoS。 |
+| 驱散技能冷却视觉提示 | 代码已实现；正式服待验证 | `Core.lua`；`SecureButtons.lua`；`C_Spell.GetSpellCooldown` | 实际技能 CD 显示中性暗层+琥珀色 `CD`，忽略普通 GCD；debuff 保持可见，点击保持启用，并可与范围外提示同时显示。 |
 | Aura 图标左键传播降级路径 | 代码已实现；`SetPropagateMouseClicks` 成功路径 mock 已覆盖 | `AuraDisplay.lua:20-40`；`tests/aura_input_test.lua:122-126` | `SetPassThroughButtons` fallback 未覆盖；能否在真实受保护 Aura Button 上稳定传到安全按钮仍是 P0。 |
 | 固定 unit 的安全施法按钮 | 代码已实现；mock 已覆盖 | `SecureButtons.lua:37-57,99-119`；`tests/secure_button_test.lua:96-145` | 只证明属性和注册方式，不证明战斗内施法成功。 |
 | 左键按下/抬起及 `useOnKeyDown=false` | 代码已实现；mock 已覆盖 | `SecureButtons.lua:42-50`；`tests/secure_button_test.lua:104-108` | 用于避免依赖账号级 `ActionButtonUseKeyDown`。 |
@@ -86,7 +89,7 @@ SimpleDispel 的“一键驱散”是：插件为固定 unit token 创建成员�
 已有测试覆盖：
 
 - `tests/test.lua`：SavedVariables 迁移、45 个按钮和容器的结构、unit-button 设置、网格位置、visibility driver、Raid 高度、缩放/重置和战斗延迟。
-- `tests/secure_button_test.lua`：固定 unit、左右键注册、`useOnKeyDown`、spell attribute、范围视觉三态、Party/Raid visibility driver。
+- `tests/secure_button_test.lua`：固定 unit、左右键注册、`useOnKeyDown`、spell attribute、范围/冷却合成视觉状态、Party/Raid visibility driver。
 - `tests/aura_input_test.lua`：Aura Button 尺寸、图标、cooldown、层数、持续时间、native mouse motion 和点击传播初始化。
 
 这些测试使用自建 API mock，不能证明真实客户端会接受 protected action，不能证明目标不变、点击图标一定成功，也不能发现真实 taint、`ADDON_ACTION_FORBIDDEN`、secret-value/forbidden-frame、战斗 roster 行为或 40 个容器的性能问题。`tests/test.lua` 还替换了 `SecureButtons`、`AuraDisplay` 和 `Spells`，因此不等于端到端集成测试。
@@ -103,6 +106,7 @@ SimpleDispel 的“一键驱散”是：插件为固定 unit token 创建成员�
 - Aura 出现、消失、倒计时、层数、tooltip、过滤器结果和图标点击传播符合预期。
 - 10/20/25/30/40 人 Raid 均显示为 28 × 28、8 列、最多 5 行的固定网格；锁定隐藏 Raid 标题/大背景并上移网格，解锁显示小型 `SD` 锚点。
 - 范围提示按当前实际驱散 spell 约每 0.25 秒刷新；`true`、`false`、`nil` 的视觉状态正确，提示不禁用点击，也不把 LoS 当作范围判断。
+- 驱散实际 CD 期间 debuff 继续显示，方块出现中性暗层和琥珀色 `CD`；普通 GCD 不触发，CD 结束后恢复，且与范围外红边/`×` 正确共存。
 - 战斗中加入、离开、掉线、死亡、复活、换队和 roster 变化不产生 protected/forbidden 错误；脱战后延迟更新能够恢复。
 - 没有 `ADDON_ACTION_FORBIDDEN`、secret-value、forbidden-frame、blocked-action 或 taint 记录。
 - 10/20/25/30/40 人团队均能正确显示固定 `raidN` 对应成员，不误点其他成员。

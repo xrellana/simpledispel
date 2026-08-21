@@ -66,10 +66,39 @@ local function CreateRangeOverlay(button)
     -- created and shown permanently; combat updates only change alpha.
     mark:SetAlpha(0)
 
+    local cooldownMark = overlay:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    cooldownMark:SetPoint("TOPLEFT", overlay, "TOPLEFT", 2, -1)
+    cooldownMark:SetText("CD")
+    cooldownMark:SetTextColor(1, 0.78, 0.20, 1)
+    cooldownMark:SetAlpha(0)
+
     button.simpleDispelRangeOverlay = overlay
     button.simpleDispelRangeShade = shade
     button.simpleDispelRangeBorder = border
     button.simpleDispelRangeMark = mark
+    button.simpleDispelCooldownMark = cooldownMark
+    button.simpleDispelRangeState = "unknown"
+    button.simpleDispelCooldownState = "unknown"
+end
+
+local function ApplyVisualState(button)
+    local outOfRange = button.simpleDispelRangeState == "out"
+    local onCooldown = button.simpleDispelCooldownState == "cooldown"
+
+    -- Range and cooldown are independent reasons the dispel cannot happen now.
+    -- Share one shade so their alpha never compounds into an unreadable icon;
+    -- keep both non-color marks visible when both states apply.
+    local shadeAlpha = 0
+    if outOfRange then
+        shadeAlpha = 0.52
+    elseif onCooldown then
+        shadeAlpha = 0.32
+    end
+
+    button.simpleDispelRangeShade:SetAlpha(shadeAlpha)
+    SetBorderAlpha(button.simpleDispelRangeBorder, outOfRange and 1 or 0)
+    button.simpleDispelRangeMark:SetAlpha(outOfRange and 1 or 0)
+    button.simpleDispelCooldownMark:SetAlpha(onCooldown and 1 or 0)
 end
 
 local function AddUnitTooltip(button)
@@ -193,15 +222,26 @@ function SecureButtons:SetRangeState(button, inRange)
     end
 
     button.simpleDispelRangeState = state
-    if state == "out" then
-        button.simpleDispelRangeShade:SetAlpha(0.52)
-        SetBorderAlpha(button.simpleDispelRangeBorder, 1)
-        button.simpleDispelRangeMark:SetAlpha(1)
-    else
-        button.simpleDispelRangeShade:SetAlpha(0)
-        SetBorderAlpha(button.simpleDispelRangeBorder, 0)
-        button.simpleDispelRangeMark:SetAlpha(0)
+    ApplyVisualState(button)
+end
+
+function SecureButtons:SetCooldownState(button, onCooldown)
+    if not button or not button.simpleDispelCooldownMark then
+        return
     end
+
+    local state = "unknown"
+    if onCooldown == true then
+        state = "cooldown"
+    elseif onCooldown == false then
+        state = "ready"
+    end
+    if button.simpleDispelCooldownState == state then
+        return
+    end
+
+    button.simpleDispelCooldownState = state
+    ApplyVisualState(button)
 end
 
 function SecureButtons:SetSpell(button, spell)
