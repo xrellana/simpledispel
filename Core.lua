@@ -129,7 +129,7 @@ local function GetActiveLayoutKey()
 end
 
 local function SavePosition(layoutKey, root)
-    if not root or InCombatLockdown() then
+    if not root then
         return
     end
 
@@ -141,6 +141,29 @@ local function SavePosition(layoutKey, root)
         x = tonumber(x) or defaults.x,
         y = tonumber(y) or defaults.y,
     }
+end
+
+-- StartMoving() glues the frame to the cursor until it is stopped. A drag that
+-- is still running drags the whole button grid under the mouse, so its unit
+-- buttons swallow every world click and mouseover and the player cannot retarget.
+-- Nothing may leave a drag running, combat included.
+local activeDrag = nil
+
+local function StopDrag(layoutKey, root)
+    if activeDrag and activeDrag.root == root then
+        activeDrag = nil
+    end
+
+    -- StopMovingOrSizing is unprotected and the root frame is not secure, so
+    -- this is safe to run mid-combat and must never be skipped.
+    root:StopMovingOrSizing()
+    SavePosition(layoutKey, root)
+end
+
+local function StopActiveDrag()
+    if activeDrag then
+        StopDrag(activeDrag.layoutKey, activeDrag.root)
+    end
 end
 
 local function UpdateLockState()
@@ -236,14 +259,12 @@ local function CreateRoot(layoutKey, globalName, titleBase, width, height, visib
         if addon.db.locked or InCombatLockdown() then
             return
         end
+        StopActiveDrag()
+        activeDrag = { layoutKey = layoutKey, root = root }
         root:StartMoving()
     end)
     dragHandle:SetScript("OnDragStop", function()
-        if InCombatLockdown() then
-            return
-        end
-        root:StopMovingOrSizing()
-        SavePosition(layoutKey, root)
+        StopDrag(layoutKey, root)
     end)
 
     local handleBackground = dragHandle:CreateTexture(nil, "BACKGROUND")
@@ -860,6 +881,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         self:RegisterEvent("PLAYER_ENTERING_WORLD")
         self:RegisterEvent("GROUP_ROSTER_UPDATE")
         self:RegisterEvent("UNIT_NAME_UPDATE")
+        self:RegisterEvent("PLAYER_REGEN_DISABLED")
         self:RegisterEvent("PLAYER_REGEN_ENABLED")
         self:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
         self:RegisterEvent("SPELLS_CHANGED")
@@ -889,6 +911,8 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         addon:RefreshRangeState()
     elseif event == "UNIT_NAME_UPDATE" then
         UpdateGroupLabels()
+    elseif event == "PLAYER_REGEN_DISABLED" then
+        StopActiveDrag()
     elseif event == "PLAYER_REGEN_ENABLED" then
         if addon.pendingSpellRefresh then
             addon:RefreshSpell()

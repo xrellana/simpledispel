@@ -66,6 +66,14 @@ function objectMethods:EnableMouse(enabled)
     self.mouseEnabled = enabled
 end
 
+function objectMethods:StartMoving()
+    self.moving = true
+end
+
+function objectMethods:StopMovingOrSizing()
+    self.moving = false
+end
+
 function objectMethods:SetAlpha(alpha)
     self.alpha = alpha
 end
@@ -476,5 +484,32 @@ eventFrame.scripts.OnEvent(eventFrame, "PLAYER_REGEN_ENABLED")
 assert(not addon.pendingLayoutRefresh, "deferred layout update was not applied")
 assert(not addon.pendingRaidSizeRefresh, "deferred raid resize was not applied")
 assert(raidRoot.height == 178, "40-player raid frame must use five rows")
+
+assert(eventFrame.events.PLAYER_REGEN_DISABLED, "combat start event was not registered")
+
+-- A drag left running keeps the frame on the cursor, so its unit buttons cover
+-- whatever the player points at and targeting stops working entirely.
+local partyRoot = addon.frames.party.root
+local partyHandle = addon.frames.party.dragHandle
+partyHandle.scripts.OnDragStart()
+assert(partyRoot.moving == true, "unlocked drag did not start")
+inCombat = true
+eventFrame.scripts.OnEvent(eventFrame, "PLAYER_REGEN_DISABLED")
+assert(partyRoot.moving == false, "combat start must release an in-flight drag")
+partyRoot:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 120, -80)
+partyHandle.scripts.OnDragStop()
+assert(partyRoot.moving == false, "drag stop must release the frame during combat")
+assert(SimpleDispelDB.layouts.party.position.x == 120, "combat drag stop must save the new position")
+assert(SimpleDispelDB.layouts.party.position.y == -80, "combat drag stop must save the new position")
+
+-- Dragging cannot begin once combat has started.
+partyHandle.scripts.OnDragStart()
+assert(partyRoot.moving == false, "combat must block a new drag")
+
+inCombat = false
+SlashCmdList.SIMPLEDISPEL("lock")
+partyHandle.scripts.OnDragStart()
+assert(partyRoot.moving == false, "locked frames must not drag")
+SlashCmdList.SIMPLEDISPEL("unlock")
 
 print("SimpleDispel mock runtime: PASS")
