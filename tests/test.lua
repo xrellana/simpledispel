@@ -512,4 +512,18 @@ partyHandle.scripts.OnDragStart()
 assert(partyRoot.moving == false, "locked frames must not drag")
 SlashCmdList.SIMPLEDISPEL("unlock")
 
+-- The visibility driver hides the party frame when the group becomes a raid.
+-- A hidden frame never sees the mouse release, so the drag must end on hide.
+partyRoot:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 40, -60)
+partyHandle.scripts.OnDragStart()
+assert(partyRoot.moving == true, "drag did not start")
+partyRoot.scripts.OnHide(partyRoot)
+assert(partyRoot.moving == false, "hiding a frame mid-drag must release it")
+assert(SimpleDispelDB.layouts.party.position.x == 40, "hide during drag must save the position")
+
+-- Hiding a frame that is not being dragged must not rewrite its saved position.
+SimpleDispelDB.layouts.party.position.x = 999
+partyRoot.scripts.OnHide(partyRoot)
+assert(SimpleDispelDB.layouts.party.position.x == 999, "idle hide must not touch the saved position")
+
 print("SimpleDispel mock runtime: PASS")

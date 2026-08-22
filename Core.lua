@@ -267,6 +267,16 @@ local function CreateRoot(layoutKey, globalName, titleBase, width, height, visib
         StopDrag(layoutKey, root)
     end)
 
+    -- The visibility driver can hide this frame mid-drag when the group turns
+    -- into a raid or back. A hidden frame never receives the mouse release, so
+    -- the drag would survive until the frame is shown again, still glued to the
+    -- cursor.
+    root:SetScript("OnHide", function()
+        if activeDrag and activeDrag.root == root then
+            StopDrag(layoutKey, root)
+        end
+    end)
+
     local handleBackground = dragHandle:CreateTexture(nil, "BACKGROUND")
     handleBackground:SetAllPoints(dragHandle)
     handleBackground:SetColorTexture(0.055, 0.065, 0.08, 0.94)
