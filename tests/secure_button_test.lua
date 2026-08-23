@@ -56,13 +56,16 @@ local function NewRegion()
     function region:SetWordWrap()
     end
 
-    function region:SetHeight()
+    function region:SetHeight(height)
+        self.height = height
     end
 
-    function region:SetWidth()
+    function region:SetWidth(width)
+        self.width = width
     end
 
     function region:SetAllPoints()
+        self.filledParent = true
     end
 
     function region:SetColorTexture(...)
@@ -249,11 +252,29 @@ local partyButton = addon.SecureButtons:Create(
     "SimpleDispelTestPartyButton",
     "party1",
     "P1",
-    48
+    48,
+    "BOTTOM",
+    48 + addon.SecureButtons.LABEL_BAND_HEIGHT
 )
 assert(#stateDrivers == 1, "party button must have one visibility driver")
 assert(stateDrivers[1].frame == partyButton, "visibility driver targets the wrong button")
 assert(stateDrivers[1].conditional == "[@party1,exists] show; hide", "visibility condition is wrong")
+
+-- The name band makes the party button taller than it is wide, so the dispel
+-- watermark can no longer fill it: that art is a square spell icon and would be
+-- stretched. It stops above the band, where the debuff icon sits on top of it.
+assert(
+    partyButton.simpleDispelSpellTexture.filledParent == nil,
+    "a watermark filling the party button is stretched by the name band"
+)
+assert(
+    partyButton.simpleDispelSpellTexture.height == 48,
+    "party watermark must stay square above the name band"
+)
+assert(
+    partyButton.simpleDispelLabel.height == addon.SecureButtons.LABEL_BAND_HEIGHT - 2,
+    "the name band must have a box height of its own"
+)
 
 local raidButton = addon.SecureButtons:Create(
     NewRegion(),
@@ -266,6 +287,10 @@ local raidButton = addon.SecureButtons:Create(
 )
 assert(raidButton.width == 28, "raid button width is wrong")
 assert(raidButton.height == 28, "raid button height is wrong")
+assert(
+    raidButton.simpleDispelSpellTexture.filledParent == true,
+    "a raid square carries no name band, so its watermark still fills the button"
+)
 assert(raidButton.simpleDispelFallbackLabel == "", "raid button must not keep a permanent label")
 assert(#stateDrivers == 2, "raid button must have its own visibility driver")
 assert(stateDrivers[2].conditional == "[@raid1,exists] show; hide", "raid visibility condition is wrong")
