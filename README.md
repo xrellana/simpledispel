@@ -101,6 +101,17 @@ Cooldown and range are independent: an out-of-range square keeps its red border 
 
 The aura's native radial cooldown still represents the debuff duration. The separate `CD` marker represents the player's dispel spell, avoiding two overlapping radial timers with different meanings.
 
+## Color themes
+
+SimpleDispel ships with two color palettes: `dark` (the default) and `light`.
+
+- `dark` is byte-for-byte identical to every appearance value used before 1.3.0. SavedVariables written by 1.2.x and earlier have no `theme` field, so upgrading is visually silent: nothing changes until you run `/sd theme light` yourself.
+- `light` is designed so that the dispellable debuff icon is the only fully saturated, full-contrast element inside the frame. The root background, drag handle, and unit-button plates become a pale, near-achromatic translucent plate; borders are darker than their fill; unit names become dark grey; and the dispel spell-icon watermark on each button is desaturated and reduced to alpha 0.08. The out-of-range and cooldown states also invert their meaning: instead of darkening the button, they wash it toward white (alpha 0.55 for out-of-range, 0.35 for cooldown), because darkening a pale plate reads louder than the dispel alert itself. The out-of-range border/`×` and the `CD` marker are re-tinted darker so they stay legible on the near-white plate.
+- The active theme is saved per account in `SimpleDispelDB.theme`.
+- Switching themes is not subject to combat lockdown. Every themed property is a color or an alpha value, and none of those are protected, so `/sd theme dark` and `/sd theme light` both work in combat.
+
+Use `/sd theme` to print the active theme; see [Slash commands](#slash-commands) for the full command list.
+
 ## Installation
 
 ### Using a downloaded archive
@@ -181,7 +192,7 @@ Both `/sd` and `/simpledispel` are registered as command aliases.
 
 | Command | Description |
 |---|---|
-| `/sd status` | Print addon version, client/build information, active mode, Aura Container support, filter, button/container counts, saved scales, active spell, and dispel cooldown state. |
+| `/sd status` | Print addon version, client/build information, active mode, Aura Container support, filter, button/container counts, saved scales, active theme, active spell, and dispel cooldown state. |
 | `/sd lock` | Lock both layouts and disable dragging. |
 | `/sd unlock` | Unlock both layouts; drag the Party title bar or the Raid `SD` anchor. |
 | `/sd scale <0.60-2.00>` | Set the scale of the currently active layout. |
@@ -193,6 +204,9 @@ Both `/sd` and `/simpledispel` are registered as command aliases.
 | `/sd reset party` | Reset only the party layout. |
 | `/sd reset raid` | Reset only the raid layout. |
 | `/sd reset all` | Reset both layouts. |
+| `/sd theme` | Print the active color theme. |
+| `/sd theme dark` | Use the dark color theme (default). |
+| `/sd theme light` | Use the light color theme. |
 | `/sd spell auto` | Remove a manual spell override and return to automatic spell selection. |
 | `/sd spell <spellID>` | Set a manual spell-ID override. Use a spell ID from the current client’s spellbook. |
 | `/sd filter mine` | Use the default `HARMFUL|RAID` filter. |
@@ -380,6 +394,7 @@ When reporting a target-binding problem, stop testing immediately and state whic
 SimpleDispel/
 ├── SimpleDispel.toc       # Addon manifest and load order
 ├── Core.lua               # Initialization, events, layouts, commands, and coordination
+├── Theme.lua              # Dark and light color palettes
 ├── DispelSpells.lua       # Candidate spells and spellbook-based resolution
 ├── SecureButtons.lua      # Secure unit buttons and spell attributes
 ├── AuraDisplay.lua        # Aura Container creation and display initialization
@@ -394,6 +409,7 @@ SimpleDispel/
 The TOC currently loads the Lua modules in this order:
 
 ~~~text
+Theme.lua
 DispelSpells.lua
 SecureButtons.lua
 AuraDisplay.lua

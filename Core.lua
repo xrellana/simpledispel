@@ -2,6 +2,7 @@ local addonName, addon = ...
 
 local PREFIX = "|cff4ee6a8SimpleDispel|r:"
 local FILTER_HELP = "mine (HARMFUL|RAID), group, all"
+local THEME_HELP = table.concat(addon.Theme.Names, " | ")
 local PARTY_BUTTON_SIZE = 48
 local RAID_BUTTON_SIZE = 28
 local RAID_COLUMNS = 8
@@ -95,8 +96,14 @@ local function InitializeDatabase()
         SimpleDispelDB = {}
     end
 
-    SimpleDispelDB.schemaVersion = 3
+    SimpleDispelDB.schemaVersion = 4
     SimpleDispelDB.filterMode = SimpleDispelDB.filterMode or "mine"
+    -- Databases written before the theme option carry no theme field. Falling
+    -- back to the dark default keeps an upgrade visually identical to 1.2.x
+    -- until the player opts in with /sd theme light.
+    if not addon.Theme:IsValid(SimpleDispelDB.theme) then
+        SimpleDispelDB.theme = addon.Theme.DEFAULT
+    end
     if type(SimpleDispelDB.locked) ~= "boolean" then
         SimpleDispelDB.locked = false
     end
@@ -184,7 +191,7 @@ local function UpdateLockState()
             frameInfo.dragHandle:SetAlpha(addon.db.locked and 0.72 or 1)
             local title = frameInfo.titleBase
             if not addon.db.locked then
-                title = title .. "  |cffaaaaaa(drag)|r"
+                title = title .. "  |cff" .. addon.Theme.DRAG_HINT_COLOR .. "(drag)|r"
             end
             frameInfo.title:SetText(title)
         end
@@ -234,6 +241,36 @@ local function ApplyAllFrameSettings()
     UpdateLockState()
 end
 
+local function ApplyFrameTheme(frameInfo)
+    local colors = addon.Theme:Colors()
+    local root = colors.rootBackground
+    frameInfo.background:SetColorTexture(root[1], root[2], root[3], root[4])
+    local handle = colors.handleBackground
+    frameInfo.handleBackground:SetColorTexture(handle[1], handle[2], handle[3], handle[4])
+    frameInfo.title:SetTextColor(colors.title[1], colors.title[2], colors.title[3])
+    frameInfo.emptyTitle:SetTextColor(
+        colors.emptyTitle[1],
+        colors.emptyTitle[2],
+        colors.emptyTitle[3]
+    )
+    frameInfo.emptyHint:SetTextColor(
+        colors.emptyHint[1],
+        colors.emptyHint[2],
+        colors.emptyHint[3]
+    )
+end
+
+-- A theme is nothing but colours and alphas, none of which are protected, so
+-- unlike every other layout change this one does not need a combat guard.
+local function ApplyTheme()
+    for _, frameInfo in pairs(addon.frames) do
+        ApplyFrameTheme(frameInfo)
+    end
+    for _, button in ipairs(addon.buttons) do
+        addon.SecureButtons:ApplyTheme(button)
+    end
+end
+
 local function CreateRoot(layoutKey, globalName, titleBase, width, height, visibilityDriver, compactHandle)
     local root = CreateFrame("Frame", globalName, UIParent)
     root:SetSize(width, height)
@@ -243,7 +280,6 @@ local function CreateRoot(layoutKey, globalName, titleBase, width, height, visib
 
     local background = root:CreateTexture(nil, "BACKGROUND")
     background:SetAllPoints(root)
-    background:SetColorTexture(0.015, 0.018, 0.024, 0.88)
 
     local dragHandle = CreateFrame("Frame", nil, root)
     if compactHandle then
@@ -279,7 +315,6 @@ local function CreateRoot(layoutKey, globalName, titleBase, width, height, visib
 
     local handleBackground = dragHandle:CreateTexture(nil, "BACKGROUND")
     handleBackground:SetAllPoints(dragHandle)
-    handleBackground:SetColorTexture(0.055, 0.065, 0.08, 0.94)
 
     local title = dragHandle:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     title:SetPoint("CENTER", dragHandle, "CENTER", 0, 0)
@@ -301,19 +336,22 @@ local function CreateRoot(layoutKey, globalName, titleBase, width, height, visib
 
     local emptyHint = emptyState:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     emptyHint:SetPoint("TOP", emptyTitle, "BOTTOM", 0, -2)
-    emptyHint:SetTextColor(0.62, 0.65, 0.70)
     emptyHint:SetText(NO_DISPEL_HINT)
 
     local frameInfo = {
         root = root,
         background = background,
         dragHandle = dragHandle,
+        handleBackground = handleBackground,
         title = title,
         titleBase = titleBase,
         content = content,
         emptyState = emptyState,
+        emptyTitle = emptyTitle,
+        emptyHint = emptyHint,
     }
     addon.frames[layoutKey] = frameInfo
+    ApplyFrameTheme(frameInfo)
 
     if RegisterStateDriver then
         RegisterStateDriver(root, "visibility", visibilityDriver)
@@ -687,9 +725,10 @@ local function PrintStatus()
         tostring(addon.db.locked)
     ))
     Print(string.format(
-        "partyScale=%.2f raidScale=%.2f",
+        "partyScale=%.2f raidScale=%.2f theme=%s",
         addon.db.layouts.party.scale or 1,
-        addon.db.layouts.raid.scale or 1
+        addon.db.layouts.raid.scale or 1,
+        addon.Theme:GetActive()
     ))
 
     if spell then
@@ -720,6 +759,7 @@ local function PrintHelp()
     Print("/sd status")
     Print("/sd spell auto | /sd spell <spellID>")
     Print("/sd filter <" .. FILTER_HELP .. "> (then /reload)")
+    Print("/sd theme <" .. THEME_HELP .. ">")
     Print("/sd lock | /sd unlock")
     Print("/sd scale <0.60-2.00> [party|raid]")
     Print("/sd reset [party|raid|all]")
@@ -760,6 +800,21 @@ local function HandleFilterCommand(argument)
 
     addon.db.filterMode = argument
     Print("filter set to " .. addon.AuraDisplay.Filters[argument] .. "; run /reload to rebuild containers")
+end
+
+local function HandleThemeCommand(argument)
+    if argument == "" then
+        Print("theme is " .. addon.Theme:GetActive() .. "; use /sd theme " .. THEME_HELP)
+        return
+    end
+    if not addon.Theme:IsValid(argument) then
+        Print("theme must be one of: " .. THEME_HELP)
+        return
+    end
+
+    addon.db.theme = argument
+    ApplyTheme()
+    Print("theme set to " .. argument)
 end
 
 local function HandleLockCommand(locked)
@@ -838,6 +893,8 @@ local function HandleSlashCommand(message)
         HandleSpellCommand(argument)
     elseif command == "filter" then
         HandleFilterCommand(argument)
+    elseif command == "theme" then
+        HandleThemeCommand(argument)
     elseif command == "lock" then
         HandleLockCommand(true)
     elseif command == "unlock" then

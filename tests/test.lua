@@ -260,6 +260,9 @@ addon.SecureButtons = {
         button.spell = spell
         return true
     end,
+    ApplyTheme = function(_, button)
+        rawset(button, "themeApplications", (rawget(button, "themeApplications") or 0) + 1)
+    end,
 }
 
 addon.AuraDisplay = {
@@ -293,6 +296,9 @@ addon.Spells = {
     end,
 }
 
+local themeChunk = assert(loadfile("Theme.lua"))
+themeChunk("SimpleDispel", addon)
+
 local coreChunk = assert(loadfile("Core.lua"))
 coreChunk("SimpleDispel", addon)
 
@@ -307,7 +313,52 @@ assert(eventFrame, "ADDON_LOADED event frame was not created")
 
 eventFrame.scripts.OnEvent(eventFrame, "ADDON_LOADED", "SimpleDispel")
 
-assert(SimpleDispelDB.schemaVersion == 3, "database schema was not upgraded")
+assert(SimpleDispelDB.schemaVersion == 4, "database schema was not upgraded")
+assert(SimpleDispelDB.theme == "dark", "a database without a theme must upgrade to dark")
+assert(addon.Theme:GetActive() == "dark", "dark must be the default theme")
+assert(
+    addon.frames.party.background.calls.SetColorTexture[1] == 0.015,
+    "party frame did not receive the dark root background"
+)
+assert(
+    rawget(createdButtons[1], "themeApplications") == nil,
+    "building the frames must not go through the frame-wide theme pass"
+)
+
+SlashCmdList.SIMPLEDISPEL("theme light")
+assert(SimpleDispelDB.theme == "light", "theme command did not persist")
+assert(
+    addon.frames.party.background.calls.SetColorTexture[1] == 0.88,
+    "light theme did not repaint the party root background"
+)
+assert(
+    addon.frames.raid.background.calls.SetColorTexture[1] == 0.88,
+    "a theme switch must repaint every frame, not only the active one"
+)
+
+local themedBefore = rawget(createdButtons[1], "themeApplications")
+SlashCmdList.SIMPLEDISPEL("theme neon")
+assert(SimpleDispelDB.theme == "light", "an unknown theme name must not be stored")
+assert(themedBefore == 1, "the theme command must repaint every unit button")
+assert(
+    rawget(createdButtons[1], "themeApplications") == themedBefore,
+    "a rejected theme must not repaint the buttons"
+)
+
+-- Every themed property is a colour or an alpha, so unlike the layout commands
+-- this one must not defer its work until combat ends.
+inCombat = true
+SlashCmdList.SIMPLEDISPEL("theme dark")
+inCombat = false
+assert(SimpleDispelDB.theme == "dark", "theme must switch during combat")
+assert(
+    addon.frames.party.background.calls.SetColorTexture[1] == 0.015,
+    "in-combat theme switch did not repaint the root background"
+)
+assert(
+    addon.pendingLayoutRefresh == false,
+    "a theme switch must not queue a deferred layout refresh"
+)
 assert(SimpleDispelDB.layouts.party.scale == 0.90, "party scale migration failed")
 assert(SimpleDispelDB.layouts.party.position.x == 17, "party position migration failed")
 assert(SimpleDispelDB.layouts.raid.scale == 1.00, "raid default scale is wrong")

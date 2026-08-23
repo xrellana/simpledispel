@@ -48,7 +48,28 @@ local function NewRegion()
     function region:ClearAllPoints()
     end
 
-    function region:SetTexCoord()
+    function region:SetTexCoord(...)
+        self.texCoord = { ... }
+    end
+
+    function region:SetColorTexture(...)
+        self.colorTexture = { ... }
+    end
+
+    function region:SetHeight(height)
+        self.pixelHeight = height
+    end
+
+    function region:SetWidth(width)
+        self.pixelWidth = width
+    end
+
+    function region:SetFrameLevel(level)
+        self.frameLevel = level
+    end
+
+    function region:GetFrameLevel()
+        return self.frameLevel or 3
     end
 
     function region:EnableMouse()
@@ -104,6 +125,10 @@ function CreateFrame(frameType)
     return NewRegion()
 end
 
+local function Close(actual, expected)
+    return type(actual) == "number" and math.abs(actual - expected) < 1e-9
+end
+
 local auraChunk = assert(loadfile("AuraDisplay.lua"))
 auraChunk("SimpleDispel", addon)
 
@@ -124,6 +149,10 @@ assert(initializedAuraButton.propagateMouseClicks == true, "mouse click propagat
 assert(initializedAuraButton.mouseMotionEnabled == true, "native aura hover was not preserved")
 assert(not initializedAuraButton.passThroughButtons, "fallback should not run when propagation succeeds")
 
+local squareCoords = initializedAuraButton.icon.texCoord
+assert(Close(squareCoords[1], 0.07) and Close(squareCoords[2], 0.93), "square icon crop is wrong")
+assert(Close(squareCoords[3], 0.07) and Close(squareCoords[4], 0.93), "square icon crop is wrong")
+
 local raidContainer, raidError = addon.AuraDisplay:Create(
     owner,
     "raid1",
@@ -133,5 +162,32 @@ local raidContainer, raidError = addon.AuraDisplay:Create(
 assert(raidContainer, tostring(raidError))
 assert(initializedAuraButton.width == 28, "compact raid aura width is wrong")
 assert(initializedAuraButton.height == 28, "compact raid aura height is wrong")
+
+-- Party buttons reserve the bottom of the aura button for the unit name, which
+-- leaves a wider-than-tall icon area. Cropping the source art to that aspect
+-- keeps the icon recognisable where stretching it into the box would not.
+local ICON_INSET = 2
+local labelledContainer, labelledError = addon.AuraDisplay:Create(
+    owner,
+    "party1",
+    "HARMFUL|RAID",
+    { width = 48, height = 48, iconBottomInset = 13, showDuration = true }
+)
+assert(labelledContainer, tostring(labelledError))
+
+local iconWidth = 48 - (ICON_INSET * 2)
+local iconHeight = 48 - 13 - (ICON_INSET * 2)
+local coords = initializedAuraButton.icon.texCoord
+assert(Close(coords[1], 0.07) and Close(coords[2], 0.93), "a shorter icon area must keep the full icon width")
+
+local expectedHeight = (coords[2] - coords[1]) * (iconHeight / iconWidth)
+assert(
+    Close(coords[4] - coords[3], expectedHeight),
+    "a label inset must crop the icon to its aspect ratio instead of squashing it"
+)
+assert(
+    Close((coords[3] + coords[4]) / 2, 0.5),
+    "the icon crop must stay centred on the source art"
+)
 
 print("SimpleDispel aura input propagation: PASS")

@@ -65,7 +65,12 @@ local function NewRegion()
     function region:SetAllPoints()
     end
 
-    function region:SetColorTexture()
+    function region:SetColorTexture(...)
+        self.colorTexture = { ... }
+    end
+
+    function region:SetDesaturated(desaturated)
+        self.desaturated = desaturated
     end
 
     function region:SetAlpha(alpha)
@@ -127,6 +132,9 @@ end
 function InCombatLockdown()
     return false
 end
+
+local themeChunk = assert(loadfile("Theme.lua"))
+themeChunk("SimpleDispel", addon)
 
 local secureChunk = assert(loadfile("SecureButtons.lua"))
 secureChunk("SimpleDispel", addon)
@@ -241,5 +249,51 @@ assert(raidButton.height == 28, "raid button height is wrong")
 assert(raidButton.simpleDispelFallbackLabel == "", "raid button must not keep a permanent label")
 assert(#stateDrivers == 2, "raid button must have its own visibility driver")
 assert(stateDrivers[2].conditional == "[@raid1,exists] show; hide", "raid visibility condition is wrong")
+
+-- The dark palette is the default, so everything above ran against it. The
+-- light palette inverts what "unavailable" looks like: it washes a button out
+-- toward the plate instead of darkening it away from a light-on-dark UI.
+assert(
+    playerButton.simpleDispelBackground.colorTexture[1] == 0.035,
+    "dark theme button plate is wrong"
+)
+assert(playerButton.simpleDispelSpellTexture.alpha == 0.28, "dark theme watermark alpha is wrong")
+
+addon.db = { theme = "light" }
+addon.SecureButtons:ApplyTheme(playerButton)
+assert(
+    playerButton.simpleDispelBackground.colorTexture[1] == 0.93,
+    "light theme did not repaint the button plate"
+)
+assert(
+    playerButton.simpleDispelBorder[1].colorTexture[1] == 0.30,
+    "a light plate needs a border darker than its fill"
+)
+assert(playerButton.simpleDispelSpellTexture.alpha == 0.08, "light theme watermark alpha is wrong")
+assert(
+    playerButton.simpleDispelSpellTexture.desaturated == true,
+    "the light theme must leave the debuff icon as the only saturated object"
+)
+assert(
+    playerButton.simpleDispelRangeShade.colorTexture[1] == 1,
+    "light theme must wash unavailable buttons out, not darken them"
+)
+assert(
+    playerButton.simpleDispelCooldownMark.textColor[1] == 0.60,
+    "Blizzard amber is unreadable on a near-white plate"
+)
+
+addon.SecureButtons:SetRangeState(playerButton, false)
+assert(playerButton.simpleDispelRangeShade.alpha == 0.55, "light out-of-range shade alpha is wrong")
+addon.SecureButtons:SetRangeState(playerButton, true)
+addon.SecureButtons:SetCooldownState(playerButton, true)
+assert(playerButton.simpleDispelRangeShade.alpha == 0.35, "light cooldown shade alpha is wrong")
+
+addon.db.theme = "dark"
+addon.SecureButtons:ApplyTheme(playerButton)
+assert(
+    playerButton.simpleDispelBackground.colorTexture[1] == 0.035,
+    "switching back to dark must restore the original plate"
+)
 
 print("SimpleDispel secure button action: PASS")
