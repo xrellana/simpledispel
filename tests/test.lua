@@ -218,6 +218,7 @@ end
 local addon = {}
 addon.SecureButtons = {
     BUTTON_SIZE = 48,
+    LABEL_BAND_HEIGHT = 14,
     Create = function(_, parent, globalName, unit, label, width, labelMode, height)
         local button = CreateFrame("Button", globalName, parent, "SecureActionButtonTemplate")
         button.unit = unit
@@ -369,7 +370,7 @@ assert(createdButtons[5].unit == "party4", "fifth party unit must be party4")
 assert(createdButtons[6].unit == "raid1", "first raid unit must be raid1")
 assert(createdButtons[45].unit == "raid40", "last raid unit must be raid40")
 assert(createdButtons[1].requestedWidth == 48, "party button width is wrong")
-assert(createdButtons[1].requestedHeight == 48, "party button height is wrong")
+assert(createdButtons[1].requestedHeight == 62, "party button height is wrong")
 assert(createdButtons[6].requestedWidth == 28, "raid button width is wrong")
 assert(createdButtons[6].requestedHeight == 28, "raid button height is wrong")
 assert(#addon.auraContainers == 45, "every unit must get one aura container")
@@ -381,6 +382,11 @@ assert(rawget(createdButtons[6], "labelMode") == nil, "compact raid button must 
 assert(addon.auraContainers[6].options.width == 28, "raid aura width is wrong")
 assert(addon.auraContainers[6].options.height == 28, "raid aura height is wrong")
 assert(addon.auraContainers[6].options.anchor == "CENTER", "raid aura must fill the compact square")
+assert(addon.auraContainers[1].options.height == 62, "party aura height must match the taller party button")
+assert(
+    addon.auraContainers[1].options.iconBottomInset == 14,
+    "party aura icon area must reserve the dedicated label band"
+)
 assert(createdButtons[6].rangeOverlayRaised, "range overlay must be raised above the aura")
 
 local raid1Point = createdButtons[6].point
@@ -407,6 +413,7 @@ end
 assert(partyVisibility == "[group:raid] hide; show", "party visibility driver is wrong")
 assert(raidVisibility == "[group:raid] show; hide", "raid visibility driver is wrong")
 assert(raidRoot.width == 246, "compact raid frame width is wrong")
+assert(addon.frames.party.root.height == 92, "party frame must grow to fit the dedicated label band")
 assert(addon.frames.raid.dragHandle.width == 28, "raid drag handle must stay compact")
 assert(addon.frames.raid.dragHandle.height == 22, "raid drag handle height is wrong")
 

@@ -6,6 +6,13 @@ addon.SecureButtons = SecureButtons
 local BUTTON_SIZE = 48
 SecureButtons.BUTTON_SIZE = BUTTON_SIZE
 
+-- The label band gets an explicit height so the icon's reserved inset can clear
+-- the label box exactly, instead of depending on whatever line height the active
+-- theme's font object happens to report (GameFontHighlightSmallOutline vs.
+-- GameFontHighlightSmall differ; see Theme.lua).
+local LABEL_BAND_HEIGHT = 14
+SecureButtons.LABEL_BAND_HEIGHT = LABEL_BAND_HEIGHT
+
 local function AddBorder(frame, drawLayer, red, green, blue, alpha)
     local lines = {}
 
@@ -169,8 +176,9 @@ function SecureButtons:Create(parent, globalName, unit, shortLabel, requestedWid
 
     local label = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmallOutline")
     if labelMode == "BOTTOM" then
-        label:SetPoint("BOTTOMLEFT", button, "BOTTOMLEFT", 2, 2)
-        label:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -2, 2)
+        label:SetPoint("BOTTOMLEFT", button, "BOTTOMLEFT", 2, 1)
+        label:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -2, 1)
+        label:SetHeight(LABEL_BAND_HEIGHT - 2)
         label:SetJustifyH("CENTER")
         label:SetWordWrap(false)
     elseif labelMode == "RIGHT" then

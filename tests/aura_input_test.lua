@@ -163,9 +163,9 @@ assert(raidContainer, tostring(raidError))
 assert(initializedAuraButton.width == 28, "compact raid aura width is wrong")
 assert(initializedAuraButton.height == 28, "compact raid aura height is wrong")
 
--- Party buttons reserve the bottom of the aura button for the unit name, which
--- leaves a wider-than-tall icon area. Cropping the source art to that aspect
--- keeps the icon recognisable where stretching it into the box would not.
+-- A bottom inset can still leave a wider-than-tall icon area in the general
+-- case. Cropping the source art to that aspect keeps the icon recognisable
+-- where stretching it into the box would not.
 local ICON_INSET = 2
 local labelledContainer, labelledError = addon.AuraDisplay:Create(
     owner,
@@ -188,6 +188,27 @@ assert(
 assert(
     Close((coords[3] + coords[4]) / 2, 0.5),
     "the icon crop must stay centred on the source art"
+)
+
+-- The party name band now sits below the icon instead of inside it, so a real
+-- party button's icon area is square again and must not be cropped at all.
+local partyContainer, partyError = addon.AuraDisplay:Create(
+    owner,
+    "party1",
+    "HARMFUL|RAID",
+    { width = 48, height = 62, iconBottomInset = 14, showDuration = true }
+)
+assert(partyContainer, tostring(partyError))
+
+local partyCoords = initializedAuraButton.icon.texCoord
+assert(
+    Close(partyCoords[1], 0.07) and Close(partyCoords[2], 0.93)
+        and Close(partyCoords[3], 0.07) and Close(partyCoords[4], 0.93),
+    "a square party icon area must keep the plain uncropped square"
+)
+assert(
+    Close(partyCoords[4] - partyCoords[3], partyCoords[2] - partyCoords[1]),
+    "a square icon area must not stretch or crop the icon's aspect ratio"
 )
 
 print("SimpleDispel aura input propagation: PASS")

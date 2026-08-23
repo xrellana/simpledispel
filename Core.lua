@@ -4,6 +4,10 @@ local PREFIX = "|cff4ee6a8SimpleDispel|r:"
 local FILTER_HELP = "mine (HARMFUL|RAID), group, all"
 local THEME_HELP = table.concat(addon.Theme.Names, " | ")
 local PARTY_BUTTON_SIZE = 48
+-- SecureButtons.lua loads before Core.lua per SimpleDispel.toc, so this resolves
+-- at load time; no fallback value here, because a mismatch should fail loudly.
+local PARTY_LABEL_HEIGHT = addon.SecureButtons.LABEL_BAND_HEIGHT
+local PARTY_BUTTON_HEIGHT = PARTY_BUTTON_SIZE + PARTY_LABEL_HEIGHT
 local RAID_BUTTON_SIZE = 28
 local RAID_COLUMNS = 8
 local PARTY_GAP = 6
@@ -418,16 +422,16 @@ end
 
 local function CreatePartyUI(filterString)
     local definitions = {
-        { unit = "player", name = "SimpleDispelPlayerButton", label = "YOU", labelMode = "BOTTOM", iconBottomInset = 13 },
-        { unit = "party1", name = "SimpleDispelParty1Button", label = "P1", labelMode = "BOTTOM", iconBottomInset = 13 },
-        { unit = "party2", name = "SimpleDispelParty2Button", label = "P2", labelMode = "BOTTOM", iconBottomInset = 13 },
-        { unit = "party3", name = "SimpleDispelParty3Button", label = "P3", labelMode = "BOTTOM", iconBottomInset = 13 },
-        { unit = "party4", name = "SimpleDispelParty4Button", label = "P4", labelMode = "BOTTOM", iconBottomInset = 13 },
+        { unit = "player", name = "SimpleDispelPlayerButton", label = "YOU", labelMode = "BOTTOM", iconBottomInset = PARTY_LABEL_HEIGHT },
+        { unit = "party1", name = "SimpleDispelParty1Button", label = "P1", labelMode = "BOTTOM", iconBottomInset = PARTY_LABEL_HEIGHT },
+        { unit = "party2", name = "SimpleDispelParty2Button", label = "P2", labelMode = "BOTTOM", iconBottomInset = PARTY_LABEL_HEIGHT },
+        { unit = "party3", name = "SimpleDispelParty3Button", label = "P3", labelMode = "BOTTOM", iconBottomInset = PARTY_LABEL_HEIGHT },
+        { unit = "party4", name = "SimpleDispelParty4Button", label = "P4", labelMode = "BOTTOM", iconBottomInset = PARTY_LABEL_HEIGHT },
     }
     local width = (PARTY_BUTTON_SIZE * #definitions)
         + (PARTY_GAP * (#definitions - 1))
         + (FRAME_PADDING * 2)
-    local height = PARTY_BUTTON_SIZE + HANDLE_HEIGHT + (FRAME_PADDING * 2)
+    local height = PARTY_BUTTON_HEIGHT + HANDLE_HEIGHT + (FRAME_PADDING * 2)
     local frameInfo = CreateRoot(
         "party",
         "SimpleDispelPartyFrame",
@@ -443,7 +447,8 @@ local function CreatePartyUI(filterString)
             definition,
             PARTY_BUTTON_SIZE,
             filterString,
-            true
+            true,
+            PARTY_BUTTON_HEIGHT
         )
         local x = FRAME_PADDING + ((index - 1) * (PARTY_BUTTON_SIZE + PARTY_GAP))
         button:SetPoint("TOPLEFT", frameInfo.content, "TOPLEFT", x, -(HANDLE_HEIGHT + FRAME_PADDING))
