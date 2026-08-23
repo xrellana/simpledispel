@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.3 — 2026-08-23
+
+- Keep the dispel spell watermark square on party buttons. The name band added in 1.3.2 made the button taller than it is wide, and the watermark filled the whole button, so that art — a square spell icon — was stretched vertically. It now ends above the name band, occupying the same square area as the debuff icon drawn on top of it. Raid squares carry no name band and are unaffected.
+
 ## 1.3.2 — 2026-08-23
 
 - Party buttons are now 48x62, so the unit name no longer competes with the debuff icon for space: the icon area is a full 44x44 square again (no vertical crop) and the name occupies a dedicated 14px band beneath it, with a 2px gap to the icon contour. The party frame grows 14px taller to match. Raid squares are unaffected.

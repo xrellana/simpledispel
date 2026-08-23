@@ -170,6 +170,14 @@ function SecureButtons:Create(parent, globalName, unit, shortLabel, requestedWid
         spellTexture:SetPoint("TOPLEFT", button, "TOPLEFT", 0, 0)
         spellTexture:SetPoint("BOTTOMLEFT", button, "BOTTOMLEFT", 0, 0)
         spellTexture:SetWidth(buttonHeight)
+    elseif labelMode == "BOTTOM" then
+        -- The name band belongs to the button but not to the icon area. Ending
+        -- the watermark above it keeps this art square, which filling the whole
+        -- button no longer does, and leaves it registered with the debuff icon
+        -- that draws on top of it.
+        spellTexture:SetPoint("TOPLEFT", button, "TOPLEFT", 0, 0)
+        spellTexture:SetPoint("TOPRIGHT", button, "TOPRIGHT", 0, 0)
+        spellTexture:SetHeight(buttonHeight - LABEL_BAND_HEIGHT)
     else
         spellTexture:SetAllPoints(button)
     end
