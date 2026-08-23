@@ -114,6 +114,26 @@ local function NewRegion()
         self.textColor = { ... }
     end
 
+    function region:GetShadowColor()
+        return 0, 0, 0, 1
+    end
+
+    function region:GetShadowOffset()
+        return 1, -1
+    end
+
+    function region:SetShadowColor(...)
+        self.shadowColor = { ... }
+    end
+
+    function region:SetShadowOffset(...)
+        self.shadowOffset = { ... }
+    end
+
+    function region:SetFontObject(fontObject)
+        self.fontObject = fontObject
+    end
+
     return region
 end
 
@@ -283,6 +303,24 @@ assert(
     "Blizzard amber is unreadable on a near-white plate"
 )
 
+-- A black outline around dark glyphs smears the letterform, and the black drop
+-- shadow every default font carries becomes a visible offset copy on a pale
+-- plate. Both read as blurred or doubled text.
+local label = playerButton.simpleDispelLabel
+assert(
+    label.fontObject == "GameFontHighlightSmall",
+    "the light theme must drop the black outline around dark label text"
+)
+assert(label.shadowColor[4] == 0, "a black drop shadow doubles dark text on a pale plate")
+assert(
+    label.shadowOffset[1] == 0 and label.shadowOffset[2] == 0,
+    "the light theme must not offset the text shadow"
+)
+assert(
+    playerButton.simpleDispelCooldownMark.shadowColor[4] == 0,
+    "unoutlined markers carry the same shadow and need the same treatment"
+)
+
 addon.SecureButtons:SetRangeState(playerButton, false)
 assert(playerButton.simpleDispelRangeShade.alpha == 0.55, "light out-of-range shade alpha is wrong")
 addon.SecureButtons:SetRangeState(playerButton, true)
@@ -294,6 +332,15 @@ addon.SecureButtons:ApplyTheme(playerButton)
 assert(
     playerButton.simpleDispelBackground.colorTexture[1] == 0.035,
     "switching back to dark must restore the original plate"
+)
+assert(
+    label.fontObject == "GameFontHighlightSmallOutline",
+    "switching back to dark must restore the outlined label font"
+)
+assert(label.shadowColor[4] == 1, "switching back to dark must restore the text shadow")
+assert(
+    label.shadowOffset[1] == 1 and label.shadowOffset[2] == -1,
+    "switching back to dark must restore the original shadow offset"
 )
 
 print("SimpleDispel secure button action: PASS")

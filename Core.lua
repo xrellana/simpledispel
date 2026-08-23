@@ -247,17 +247,9 @@ local function ApplyFrameTheme(frameInfo)
     frameInfo.background:SetColorTexture(root[1], root[2], root[3], root[4])
     local handle = colors.handleBackground
     frameInfo.handleBackground:SetColorTexture(handle[1], handle[2], handle[3], handle[4])
-    frameInfo.title:SetTextColor(colors.title[1], colors.title[2], colors.title[3])
-    frameInfo.emptyTitle:SetTextColor(
-        colors.emptyTitle[1],
-        colors.emptyTitle[2],
-        colors.emptyTitle[3]
-    )
-    frameInfo.emptyHint:SetTextColor(
-        colors.emptyHint[1],
-        colors.emptyHint[2],
-        colors.emptyHint[3]
-    )
+    addon.Theme:ApplyText(frameInfo.title, colors.title, colors.titleFont)
+    addon.Theme:ApplyText(frameInfo.emptyTitle, colors.emptyTitle, colors.titleFont)
+    addon.Theme:ApplyText(frameInfo.emptyHint, colors.emptyHint, colors.hintFont)
 end
 
 -- A theme is nothing but colours and alphas, none of which are protected, so

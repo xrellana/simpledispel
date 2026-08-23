@@ -111,9 +111,9 @@ local function ApplyVisualState(button)
     button.simpleDispelCooldownMark:SetAlpha(onCooldown and 1 or 0)
 end
 
-local function ApplyLabelColor(button, colors)
+local function ApplyLabelStyle(button, colors)
     local color = button.simpleDispelHasSpell and colors.labelReady or colors.labelMissing
-    button.simpleDispelLabel:SetTextColor(color[1], color[2], color[3])
+    addon.Theme:ApplyText(button.simpleDispelLabel, color, colors.labelFont)
 end
 
 local function AddUnitTooltip(button)
@@ -221,22 +221,14 @@ function SecureButtons:ApplyTheme(button)
         pcall(spellTexture.SetDesaturated, spellTexture, colors.spellTextureDesaturated)
     end
 
-    ApplyLabelColor(button, colors)
+    ApplyLabelStyle(button, colors)
 
     local shade = colors.stateShade
     button.simpleDispelRangeShade:SetColorTexture(shade[1], shade[2], shade[3], shade[4])
     SetBorderColor(button.simpleDispelRangeBorder, colors.outOfRangeBorder)
 
-    local rangeMark = colors.outOfRangeMark
-    button.simpleDispelRangeMark:SetTextColor(rangeMark[1], rangeMark[2], rangeMark[3], rangeMark[4])
-
-    local cooldownMark = colors.cooldownMark
-    button.simpleDispelCooldownMark:SetTextColor(
-        cooldownMark[1],
-        cooldownMark[2],
-        cooldownMark[3],
-        cooldownMark[4]
-    )
+    addon.Theme:ApplyText(button.simpleDispelRangeMark, colors.outOfRangeMark, colors.markFont)
+    addon.Theme:ApplyText(button.simpleDispelCooldownMark, colors.cooldownMark, colors.markFont)
 
     ApplyVisualState(button)
 end
@@ -322,7 +314,7 @@ function SecureButtons:SetSpell(button, spell)
     end
 
     button.simpleDispelHasSpell = spell ~= nil
-    ApplyLabelColor(button, addon.Theme:Colors())
+    ApplyLabelStyle(button, addon.Theme:Colors())
 
     return true
 end

@@ -26,6 +26,13 @@ local PALETTES = {
         spellTextureDesaturated = false,
         labelReady = { 0.82, 1, 0.82 },
         labelMissing = { 1, 0.45, 0.45 },
+        -- Light text on a near-black plate: the outline and the black drop
+        -- shadow are what make it readable, so both are left alone.
+        labelFont = "GameFontHighlightSmallOutline",
+        titleFont = "GameFontNormalSmall",
+        hintFont = "GameFontHighlightSmall",
+        markFont = "GameFontNormalSmall",
+        textShadow = nil,
         -- Unavailable states darken the button away from a light-on-dark UI.
         stateShade = { 0.01, 0.01, 0.015, 1 },
         outOfRangeShadeAlpha = 0.52,
@@ -51,6 +58,16 @@ local PALETTES = {
         spellTextureDesaturated = true,
         labelReady = { 0.16, 0.17, 0.20 },
         labelMissing = { 0.70, 0.12, 0.10 },
+        -- Dark text on a pale plate inverts what the font decorations do. A
+        -- black outline around a dark glyph thickens and smears the letterform,
+        -- and the black drop shadow every default font carries becomes a
+        -- visible offset copy. Drop to the unoutlined variant and switch the
+        -- shadow off; the plate supplies all the contrast the text needs.
+        labelFont = "GameFontHighlightSmall",
+        titleFont = "GameFontNormalSmall",
+        hintFont = "GameFontHighlightSmall",
+        markFont = "GameFontNormalSmall",
+        textShadow = { color = { 0, 0, 0, 0 }, offset = { 0, 0 } },
         -- Darkening a light plate reads louder than the dispel alert itself, so
         -- unavailable states wash toward the background instead of away from it.
         stateShade = { 1, 1, 1, 1 },
@@ -62,6 +79,71 @@ local PALETTES = {
         cooldownMark = { 0.60, 0.36, 0.02, 1 },
     },
 }
+
+-- Keyed by font string so no widget field is added, and weak so a discarded
+-- font string is not held alive by this table.
+local rememberedShadows = setmetatable({}, { __mode = "k" })
+
+-- The dark palette has to restore exactly what each font object supplied, which
+-- means capturing it before the light palette overwrites it.
+local function RememberShadow(fontString)
+    local remembered = rememberedShadows[fontString]
+    if remembered then
+        return remembered
+    end
+
+    remembered = {}
+    if fontString.GetShadowColor then
+        local ok, red, green, blue, alpha = pcall(fontString.GetShadowColor, fontString)
+        if ok and type(red) == "number" then
+            remembered.color = { red, green or 0, blue or 0, alpha or 1 }
+        end
+    end
+    if fontString.GetShadowOffset then
+        local ok, x, y = pcall(fontString.GetShadowOffset, fontString)
+        if ok and type(x) == "number" then
+            remembered.offset = { x, y or 0 }
+        end
+    end
+
+    rememberedShadows[fontString] = remembered
+    return remembered
+end
+
+function Theme:ApplyText(fontString, color, fontObject)
+    if not fontString then
+        return
+    end
+
+    local remembered = RememberShadow(fontString)
+
+    -- Adopting a font object re-inherits its colour and shadow, so the swap has
+    -- to happen before either of them is applied.
+    if fontObject and fontString.SetFontObject then
+        pcall(fontString.SetFontObject, fontString, fontObject)
+    end
+
+    local shadow = self:Colors().textShadow
+    local shadowColor = (shadow and shadow.color) or remembered.color
+    local shadowOffset = (shadow and shadow.offset) or remembered.offset
+    if shadowColor and fontString.SetShadowColor then
+        pcall(
+            fontString.SetShadowColor,
+            fontString,
+            shadowColor[1],
+            shadowColor[2],
+            shadowColor[3],
+            shadowColor[4]
+        )
+    end
+    if shadowOffset and fontString.SetShadowOffset then
+        pcall(fontString.SetShadowOffset, fontString, shadowOffset[1], shadowOffset[2])
+    end
+
+    if color then
+        fontString:SetTextColor(color[1], color[2], color[3])
+    end
+end
 
 function Theme:IsValid(name)
     return PALETTES[name] ~= nil
