@@ -2,101 +2,101 @@
 
 ## 1.3.2 — 2026-08-23
 
-- 小队按钮改为 48x62，姓名不再与 debuff 图标区争抢空间——图标区恢复为 44x44 正方形（不再纵向裁切），姓名占据下方 14px 独立区域，与图标描边之间保留 2px 间隙；小队框体整体高度相应增加 14px。团队方格不受影响。
+- Party buttons are now 48x62, so the unit name no longer competes with the debuff icon for space: the icon area is a full 44x44 square again (no vertical crop) and the name occupies a dedicated 14px band beneath it, with a 2px gap to the icon contour. The party frame grows 14px taller to match. Raid squares are unaffected.
 
 ## 1.3.1 — 2026-08-23
 
-- 修复 1.3.0 中 `light` 主题文字发虚、看起来有重影的问题（例如 `YOU`、`SimpleDispel Party`）。成因有两个，都是只在深色底板上成立的字体修饰：暴雪默认字体对象自带 (1, -1) 偏移的黑色投影，在浅色底板上会变成一份清晰可读、向右下错开的深色字形副本；`*Outline` 变体额外带一圈黑色描边，包住浅色文字是增强分离，包住深色文字则是把笔画加粗糊成一团。
-- `light` 主题现在改用无描边字体变体并关闭投影。深色主题不写死投影数值，而是在首次应用时记下各字体对象原本的投影颜色与偏移，切回时原样还原。
-- `AuraDisplay` 中 debuff 图标上的层数文字与框体下方的持续时间文字始终不在浅色底板上（分别压在图标上和框体外的游戏画面上），保留原有描边与投影不变。
+- Fix the blurred, apparently doubled text on the `light` theme introduced in 1.3.0 (for example `YOU` and `SimpleDispel Party`). Two separate causes, both font decoration that only works on a dark plate: every Blizzard default font object carries a black drop shadow offset by (1, -1), which on a pale plate becomes a legible dark copy of the glyph shifted down and to the right; the `*Outline` variants additionally draw a black outline, which separates light text from its background but thickens dark letterforms and smears them together.
+- The `light` theme now selects the unoutlined font variants and switches the shadow off. The dark theme no longer hard-codes shadow values: it records each font object's original shadow colour and offset the first time the theme is applied, and restores exactly that when switching back.
+- The stack count text on the debuff icon and the duration text below the button, both in `AuraDisplay`, never sit on a pale plate — they sit on the icon and on the game world outside the frame respectively — so they keep their existing outline and shadow.
 
 ## 1.3.0 — 2026-08-23
 
-- 新增可选颜色主题，默认外观完全不变：新增独立 `Theme.lua` 模块，包含 `dark`（默认）与 `light` 两套调色板；`dark` 与 1.3.0 之前的颜色逐字节一致，未写入 `theme` 字段的旧存档（1.2.x 及更早）自动回退到 `dark`，升级后不做任何操作就看不到任何视觉差异，需手动 `/sd theme light` 才会切换。
-- SavedVariables schema 由 3 升至 4，新增 `SimpleDispelDB.theme` 字段。
-- 新增 `/sd theme`、`/sd theme dark`、`/sd theme light` 命令；未识别的主题名会被拒绝，且不修改已保存的主题。与 `/sd scale`、`/sd reset`、`/sd lock` 不同，主题切换不受战斗保护限制——涉及的属性全部是颜色与透明度，均不受保护，因此战斗中同样可以执行。
-- `light` 主题的设计目标是让可驱散的 debuff 图标成为框体内唯一保持完整饱和度与对比度的元素：根背景、拖动手柄和单位按钮底板改为近无彩、半透明的浅色板；边框改为深于底色的填充；单位姓名文字改为深灰；每个按钮上的驱散技能水印图标去饱和并降至 0.08 透明度。
-- `light` 主题下"不可用"状态的含义被反转：范围外与冷却状态改为把按钮洗白（alpha 分别为 0.55 / 0.35）而不是加深，因为在浅色底板上加深反而比洗白更刺眼，会盖过驱散提示本身；范围外的边框、`×` 与 `CD` 标记相应改用更深的色调，以便在近白色底板上保持可读（暴雪原生的琥珀色在浅色底板上几乎不可见）。
-- 修复两处图标渲染问题，两套主题均适用：debuff 图标四边现在保留 2px 按钮底板边距，不再贴住格子边框；小队按钮底部为姓名预留的 13px 区域此前会把图标纵向拉伸变形，现在改为按正确宽高比裁切并居中显示（团队方格本身是正方形，不受影响）。
-- debuff 图标周围新增 1px 深色描边，绘制在冷却转圈之上，用于在浅色底板上为浅色或明亮的 debuff 图标提供硬边界；同一描边颜色在深色主题背景下不可见，因此两套主题共用同一份实现。
+- Add an optional colour theme with no change to the default appearance: a new standalone `Theme.lua` module carries the `dark` (default) and `light` palettes. `dark` reproduces every pre-1.3.0 colour byte for byte, and saved variables written before this change (1.2.x and earlier) carry no `theme` field and fall back to it, so an upgrade is visually silent until you opt in with `/sd theme light`.
+- SavedVariables schema raised from 3 to 4, adding the `SimpleDispelDB.theme` field.
+- Add `/sd theme`, `/sd theme dark` and `/sd theme light`. An unrecognised theme name is rejected and leaves the saved theme untouched. Unlike `/sd scale`, `/sd reset` and `/sd lock`, switching themes is not restricted by combat protection — every property involved is a colour or an alpha, none of which is protected, so it works during combat as well.
+- The `light` palette is designed to make the dispellable debuff icon the only element inside the frame that keeps full saturation and contrast: the root background, drag handle and unit button plates become near-achromatic, semi-transparent light panels; borders become fills darker than the plate; unit names become dark grey; and the dispel spell watermark on each button is desaturated and dropped to 0.08 alpha.
+- The meaning of the "unavailable" states is inverted on the `light` theme: out of range and cooldown wash the button out (alpha 0.55 and 0.35 respectively) rather than darkening it, because on a pale plate darkening reads louder than washing out and drowns the dispel alert itself. The out-of-range border and the `×` and `CD` marks move to correspondingly darker tones to stay readable on a near-white plate (Blizzard's native amber is all but invisible there).
+- Fix two icon rendering problems that apply to both themes: debuff icons now keep a 2px button plate margin on all four sides instead of touching the cell border, and the 13px the party button reserves at the bottom for the name used to stretch the icon vertically out of shape, which is now a correctly proportioned, centred crop instead (raid squares are square already and were unaffected).
+- Add a 1px dark contour around the debuff icon, drawn above the cooldown swipe, to give pale or bright debuff art a hard edge on the light plate. The same colour is invisible against the dark theme's background, so one implementation serves both palettes.
 
 ## 1.2.2 — 2026-08-22
 
-- 封堵与 1.2.1 同类的拖动残留隐患：小队/团队框体由 visibility driver 切换显示（小队转团队或退团），被隐藏的框体收不到鼠标抬起事件，`OnDragStop` 不会触发，拖动会一直保留到框体下次显示，届时框体仍粘在光标上并再次卡死目标切换。现在框体 `OnHide` 会结束属于它的拖动；未在拖动的框体隐藏时不会改写已保存的位置。
+- Close the same class of stuck-drag hazard as 1.2.1: the party and raid frames are shown and hidden by a visibility driver (joining a raid from a party, or leaving the group), and a frame hidden mid-drag never receives the mouse-up, so `OnDragStop` never fires and the drag survives until the frame is next shown — at which point it is still stuck to the cursor and jams target switching again. A frame now ends its own drag in `OnHide`; a frame that is not being dragged does not rewrite the saved position when it hides.
 
 ## 1.2.1 — 2026-08-22
 
-- 修复战斗中拖动框体导致无法切换目标的严重问题：拖动过程中进入战斗时，`OnDragStop` 会因战斗锁定提前返回而跳过 `StopMovingOrSizing`，框体从此一直跟随鼠标，其单位按钮挡住所有世界点击和鼠标悬停，目标被卡死在原单位上。
-- `OnDragStop` 现在无条件释放拖动；新增 `PLAYER_REGEN_DISABLED` 处理，战斗开始时立即结束进行中的拖动，不必等玩家松开鼠标。
-- 战斗中结束的拖动也会保存新位置（`GetPoint` 与 SavedVariables 均不受战斗保护限制）。
+- Fix a serious problem where dragging a frame during combat made target switching impossible: when combat started mid-drag, `OnDragStop` returned early on the combat lock and skipped `StopMovingOrSizing`, so the frame followed the mouse from then on and its unit buttons swallowed every world click and hover, leaving the target stuck on whichever unit was already selected.
+- `OnDragStop` now releases the drag unconditionally, and a new `PLAYER_REGEN_DISABLED` handler ends any drag in progress the moment combat starts, rather than waiting for the player to release the mouse.
+- A drag ended during combat still saves the new position (neither `GetPoint` nor SavedVariables is restricted by combat protection).
 
 ## 1.2.0 — 2026-08-21
 
-- 驱散技能进入实际冷却时继续保留 debuff，并在所有单位方块上显示中性暗层和琥珀色 `CD` 标记；冷却结束后自动恢复。
-- 区分驱散技能冷却与普通公共冷却（GCD）；冷却与范围外状态可同时显示，且不会重复叠加暗层或禁用点击。
+- Keep showing debuffs while the dispel spell is on a real cooldown, and mark every unit square with a neutral dark shade and an amber `CD`; both clear automatically once the cooldown ends.
+- Distinguish the dispel spell's own cooldown from the global cooldown (GCD). Cooldown and out-of-range states can apply at the same time without compounding the shade or disabling clicks.
 
 ## 1.1.1 — 2026-08-19
 
-- 修复单位 tooltip 锚点设置，改用客户端默认锚点，并补充对应的交互测试。
+- Fix the unit tooltip anchor to use the client's default anchor, with an interaction test to match.
 
 ## 1.1.0 — 2026-08-19
 
-- Raid 改为 28 × 28 像素方格，固定 8 列、最多 5 行；不再常驻显示成员姓名，使用普通 unit button 的 tooltip 识别成员。
-- Raid 锁定时隐藏标题和大背景并将网格上移；解锁时显示小型 `SD` 拖动锚点。
-- 根据当前实际选中的友方驱散技能，通过 `C_Spell.IsSpellInRange` 约每 0.25 秒刷新范围提示：`true` 保持正常外观，`false` 显示暗色遮罩、红边和 `×`，`nil` 保持中性。
-- 范围提示仅提供视觉反馈，不禁用点击；不能判断 LoS，且可能因客户端刷新延迟暂时滞后。
+- Raid becomes a grid of 28 x 28 pixel squares, fixed at 8 columns and at most 5 rows. Member names are no longer permanently displayed; the ordinary unit button tooltip identifies members instead.
+- A locked raid frame hides its title and large background and moves the grid up; unlocking it shows a small `SD` drag anchor.
+- Refresh the range hint roughly every 0.25s through `C_Spell.IsSpellInRange`, using whichever friendly dispel spell is actually selected: `true` keeps the normal appearance, `false` shows a dark overlay, a red border and `×`, and `nil` stays neutral.
+- The range hint is visual feedback only and does not disable clicks. It cannot account for line of sight, and may lag briefly behind the client's own refresh.
 
 ## 1.0.0 — 2026-08-17
 
-- 发布首个正式稳定版本。
-- 当前职业或专精没有已知友方驱散时，隐藏不可用的单位按钮并显示简中、繁中或英文说明。
-- 无驱散技能时将 Raid 空状态压缩为紧凑高度；重新检测到技能后自动恢复完整 Party/Raid 框体。
-- 登录、进入世界、切换专精、技能或天赋变化时重新检测，战斗中的受保护更新延迟到脱战后执行。
-- 手动 spell ID 仅在当前角色确实学会该技能时生效，避免跨角色 SavedVariables 造成无驱散职业误判。
-- 新增驱散检测、空状态切换、战斗延迟和安全属性清理测试。
+- First stable release.
+- Hide the unusable unit buttons and show an explanation in Simplified Chinese, Traditional Chinese or English when the current class or specialization has no known friendly dispel.
+- Collapse the raid empty state to a compact height when no dispel spell is available, and restore the full party and raid frames automatically once one is detected again.
+- Re-detect on login, on entering the world, and on specialization, spell or talent changes; protected updates that fall during combat are deferred until it ends.
+- A manual spell ID only takes effect if the current character actually knows that spell, so account-wide SavedVariables cannot mis-detect a dispel on a class that has none.
+- Add tests for dispel detection, empty-state switching, combat deferral and secure attribute clearing.
 
 ## 0.10.0-beta.5 — 2026-08-17
 
-- Raid 格由编号改为直接显示对应 `raidN` 成员名字，名字不参与排序或施法决策。
-- Raid 改为固定 5 列的姓名条目：左侧 32 像素 debuff 图标，右侧成员名。
-- Raid 外框行数按当前团队人数自动调整；25 人显示 5×5，只有 40 人显示 5×8。
-- 战斗中 roster 变化不会修改受保护布局，外框尺寸会在脱战后安全刷新。
+- Raid squares show the name of the corresponding `raidN` member instead of an index; names take no part in sorting or casting decisions.
+- Raid becomes fixed five-column name rows: a 32 pixel debuff icon on the left, the member name on the right.
+- The raid frame's row count follows the current raid size; 25 players show 5 x 5, and only 40 players show 5 x 8.
+- Roster changes during combat do not modify the protected layout; the frame is resized safely once combat ends.
 
 ## 0.10.0-beta.4 — 2026-08-16
 
-- 小队按钮由 `P1`–`P4` 改为直接显示实际队员名字。
-- 小队 debuff 图标底部预留姓名栏，图标出现时仍可识别成员。
-- 名字只直接交给 FontString 显示，不读取、截断、比较或参与战斗决策。
-- Raid 保持紧凑的 `1`–`40` 固定编号网格。
+- Party buttons show actual member names instead of `P1`–`P4`.
+- The party debuff icon reserves a name strip at the bottom, so members stay identifiable while an icon is showing.
+- Names are only handed straight to a FontString for display; they are never read, truncated, compared or used in combat decisions.
+- Raid keeps its compact, fixed `1`–`40` numbered grid.
 
 ## 0.10.0-beta.3 — 2026-08-16
 
-- 修复安全按钮只注册 `LeftButtonUp`，在默认按下施法 CVar 下不执行动作的问题。
-- 同时注册 LeftButton 按下与抬起事件，并用 `useOnKeyDown=false` 明确只在抬起时施法一次。
-- 新增 SecureActionButton 点击注册、固定单位和施法属性专项测试。
+- Fix secure buttons registering only `LeftButtonUp`, which performed no action under the default cast-on-down CVar.
+- Register both LeftButton down and up, and use `useOnKeyDown=false` to cast exactly once, explicitly on release.
+- Add dedicated tests for SecureActionButton click registration, fixed units and cast attributes.
 
 ## 0.10.0-beta.2 — 2026-08-16
 
-- 修复 Aura 图标覆盖安全按钮时，点击图标不能触发驱散的问题。
-- 在 Aura Button 初始化窗口内启用原生鼠标点击传播，保留图标、倒计时和 tooltip。
-- 保留 `SetPassThroughButtons("LeftButton")` 作为客户端兼容降级路径。
+- Fix clicks on the aura icon not triggering a dispel where the icon covers the secure button.
+- Enable native mouse click propagation inside the aura button's initialization window, keeping the icon, cooldown swipe and tooltip intact.
+- Keep `SetPassThroughButtons("LeftButton")` as a client compatibility fallback.
 
 ## 0.10.0-beta.1 — 2026-08-16
 
-- 新增独立 Raid 模式，预创建固定 `raid1`–`raid40` 安全按钮。
-- 新增 8×5 团队网格，Raid 中自动安全切换，小队布局自动隐藏。
-- 小队与团队分别保存位置和缩放。
-- `/sd scale` 和 `/sd reset` 新增 `party`、`raid`、`all` 参数。
-- 团队按钮使用 32 像素图标和原生冷却转圈，省略外置持续时间文字以避免网格重叠。
-- SavedVariables schema 升级到 3，并迁移原五人版位置与缩放。
-- 新增 45 按钮模拟运行时测试。
+- Add a separate raid mode with pre-created, fixed `raid1`–`raid40` secure buttons.
+- Add an 8 x 5 raid grid that switches in safely when in a raid, hiding the party layout.
+- Party and raid keep separate saved positions and scales.
+- `/sd scale` and `/sd reset` take `party`, `raid` and `all`.
+- Raid buttons use 32 pixel icons and the native cooldown swipe, omitting the external duration text to avoid overlapping the grid.
+- SavedVariables schema raised to 3, migrating the original five-player position and scale.
+- Add a 45-button mock runtime test.
 
 ## 0.9.0-beta.1 — 2026-08-16
 
-- 五人小队 MVP：`player` 与 `party1`–`party4`。
-- 新增拖动、锁定、缩放、重置和设置持久化。
-- 新增可安装 beta ZIP 与副本实测清单。
+- Five-player party MVP: `player` and `party1`–`party4`.
+- Add dragging, locking, scaling, resetting and settings persistence.
+- Add an installable beta ZIP and a dungeon field-test checklist.
 
 ## 0.1.0-alpha.1 — 2026-08-16
 
-- 建立 `player`/`party1` 安全点击与 Aura Container 技术验证原型。
+- Establish the `player` and `party1` secure click and aura container proof of concept.
