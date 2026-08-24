@@ -36,6 +36,7 @@ The addon does **not** provide an automatic dispel decision engine. It does not 
 - Compact five-slot solo/party layout.
 - Raid layout with eight columns, up to five rows, and forty fixed unit slots.
 - Direct display of current party member names; raid members are identified by the normal unit-button tooltip.
+- Optional square party buttons: `/sd names hide` collapses the name band, leaving the icon untouched.
 - Raid range feedback for the currently selected friendly-dispel spell, without disabling clicks.
 - Friendly-dispel cooldown feedback that keeps debuffs visible while marking the action as temporarily unavailable.
 - Native aura icon, application count, tooltip, and cooldown display where supported by the client.
@@ -62,7 +63,11 @@ The party layout contains five horizontal slots:
 - `party3`
 - `party4`
 
-The player slot is always available. Missing party units are hidden by secure state drivers. Party buttons are 48 × 48 pixels by default, with the member name shown in the lower part of the button. The name remains visible when an aura icon is displayed.
+The player slot is always available. Missing party units are hidden by secure state drivers. Party buttons are 48 × 62 pixels by default: a 48 × 48 icon square with the member name in a dedicated 14-pixel band below it, so the name never competes with the debuff icon for space and remains visible when an aura icon is displayed.
+
+`/sd names hide` collapses that band, which turns every party button into a 48 × 48 square and shrinks the party frame by the same 14 pixels. Nothing inside the icon square moves: the debuff icon, its stack count, the spell watermark, and the duration text below the button all keep the position and size they have with the name band shown. Party members are then identified the same way raid members already are, by the normal unit-button tooltip. `/sd names show` restores the band. The setting is saved per account in `SimpleDispelDB.hidePartyNames` and defaults to showing the names, so upgrading changes nothing until you run the command yourself.
+
+Collapsing or restoring the band resizes protected action buttons, so unlike a theme switch it is subject to combat lockdown: a change requested during combat is applied when combat ends.
 
 The party layout is visible outside a raid and is also used when you are alone.
 
@@ -192,7 +197,7 @@ Both `/sd` and `/simpledispel` are registered as command aliases.
 
 | Command | Description |
 |---|---|
-| `/sd status` | Print addon version, client/build information, active mode, Aura Container support, filter, button/container counts, saved scales, active theme, active spell, and dispel cooldown state. |
+| `/sd status` | Print addon version, client/build information, active mode, Aura Container support, filter, button/container counts, saved scales, active theme, party name visibility, active spell, and dispel cooldown state. |
 | `/sd lock` | Lock both layouts and disable dragging. |
 | `/sd unlock` | Unlock both layouts; drag the Party title bar or the Raid `SD` anchor. |
 | `/sd scale <0.60-2.00>` | Set the scale of the currently active layout. |
@@ -207,6 +212,9 @@ Both `/sd` and `/simpledispel` are registered as command aliases.
 | `/sd theme` | Print the active color theme. |
 | `/sd theme dark` | Use the dark color theme (default). |
 | `/sd theme light` | Use the light color theme. |
+| `/sd names` | Print whether party names are shown or hidden. |
+| `/sd names hide` | Hide the party name band; party buttons become 48 × 48 squares. |
+| `/sd names show` | Show the party name band again (default). |
 | `/sd spell auto` | Remove a manual spell override and return to automatic spell selection. |
 | `/sd spell <spellID>` | Set a manual spell-ID override. Use a spell ID from the current client’s spellbook. |
 | `/sd filter mine` | Use the default `HARMFUL|RAID` filter. |
@@ -310,7 +318,7 @@ The repository contains two types of testing material.
 
 The files under [tests](tests) simulate enough of the WoW API to exercise the addon’s structural behavior without launching the game:
 
-- [tests/test.lua](tests/test.lua) checks SavedVariables migration, creation of five party and forty raid buttons, Aura Container creation, unit-button setup, grid placement, visibility drivers, raid height calculation, cooldown/GCD state updates, scale commands, reset behavior, and combat-deferred updates.
+- [tests/test.lua](tests/test.lua) checks SavedVariables migration, creation of five party and forty raid buttons, Aura Container creation, unit-button setup, grid placement, visibility drivers, raid height calculation, cooldown/GCD state updates, scale commands, party name band commands, reset behavior, and combat-deferred updates.
 - [tests/dispel_spells_test.lua](tests/dispel_spells_test.lua) checks class spell detection, known manual overrides, cross-character override fallback, and classes without a friendly dispel.
 - [tests/secure_button_test.lua](tests/secure_button_test.lua) checks fixed unit attributes, secure click registration, spell attributes, combined range/cooldown visual states, and party/raid visibility drivers.
 - [tests/aura_input_test.lua](tests/aura_input_test.lua) checks Aura Button initialization, icon sizing, duration/cooldown setup, native mouse motion, and click propagation.

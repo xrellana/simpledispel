@@ -13,6 +13,7 @@ SimpleDispel shows up to one Blizzard-filtered harmful aura per supported unit. 
 - Marks out-of-range units with a red border and `×`; an unknown range stays neutral. Range is visual guidance only and never disables clicks.
 - Keeps debuffs visible while the dispel is on its real cooldown and adds a `CD` marker; the global cooldown alone does not trigger it.
 - Separate saved position and scale for party and raid layouts, plus `dark` and `light` themes.
+- Optional square party buttons: `/sd names hide` removes the name band without moving anything inside the icon.
 - No dependencies.
 
 SimpleDispel is **not** an automatic dispel or decision engine: it does not select a target, prioritize debuffs, switch targets, or cast without your click.
@@ -43,6 +44,9 @@ Both `/sd` and `/simpledispel` are command aliases. Running `/sd` with no recogn
 | `/sd theme` | Prints the active theme. |
 | `/sd theme dark` | Selects the default dark theme. |
 | `/sd theme light` | Selects the light theme. Theme changes also work during combat. |
+| `/sd names` | Prints whether the party name band is shown or hidden. |
+| `/sd names hide` | Hides the party name band; party buttons become 48 x 48 squares. Names then come from the unit tooltip. |
+| `/sd names show` | Shows the party name band again (default). |
 | `/sd spell auto` | Clears a manual override and returns to automatic spell selection. |
 | `/sd spell <spellID>` | Uses a spell-ID override. The character must know the spell; the addon does not verify that it is a friendly dispel. |
 | `/sd filter mine` | Uses `HARMFUL\|RAID` (default). |

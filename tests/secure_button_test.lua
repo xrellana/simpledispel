@@ -105,6 +105,10 @@ local function NewRegion()
         self.texture = texture
     end
 
+    function region:SetShown(shown)
+        self.shown = shown
+    end
+
     function region:Show()
         self.shown = true
     end
@@ -293,6 +297,28 @@ assert(
 )
 assert(raidButton.simpleDispelFallbackLabel == "", "raid button must not keep a permanent label")
 assert(#stateDrivers == 2, "raid button must have its own visibility driver")
+
+-- Hiding the party name band collapses it out of the button's own height, and
+-- what remains is exactly the square the watermark and the debuff icon already
+-- occupy, so nothing inside the icon area moves.
+local bandOK, bandError = addon.SecureButtons:SetNameBandShown(partyButton, false)
+assert(bandOK, tostring(bandError))
+assert(partyButton.height == 48, "a party button without its name band must be square")
+assert(
+    partyButton.simpleDispelSpellTexture.height == 48,
+    "collapsing the name band must leave the watermark square untouched"
+)
+assert(partyButton.simpleDispelLabel.shown == false, "a collapsed band must not leave the name visible")
+
+assert(addon.SecureButtons:SetNameBandShown(partyButton, true), "the name band must be restorable")
+assert(partyButton.height == 48 + addon.SecureButtons.LABEL_BAND_HEIGHT, "restoring the band must restore the height")
+assert(partyButton.simpleDispelSpellTexture.height == 48, "restoring the band must not resize the watermark")
+assert(partyButton.simpleDispelLabel.shown == true, "a restored band must show the name again")
+
+local raidBandOK, raidBandError = addon.SecureButtons:SetNameBandShown(raidButton, false)
+assert(raidBandOK == false, "a raid square has no name band to collapse")
+assert(raidBandError == "no-name-band", "collapsing a bandless button reported the wrong reason")
+assert(raidButton.height == 28, "a rejected band change must not resize the button")
 assert(stateDrivers[2].conditional == "[@raid1,exists] show; hide", "raid visibility condition is wrong")
 
 -- The dark palette is the default, so everything above ran against it. The

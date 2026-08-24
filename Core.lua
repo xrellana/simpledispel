@@ -29,6 +29,8 @@ elseif locale == "zhTW" then
     NO_DISPEL_HINT = "偵測到驅散技能後，框架會自動啟用。"
 end
 
+local PARTY_UNITS = { "player", "party1", "party2", "party3", "party4" }
+
 local DEFAULT_LAYOUTS = {
     party = { point = "CENTER", relativePoint = "CENTER", x = 0, y = -180, scale = 1.00 },
     raid = { point = "CENTER", relativePoint = "CENTER", x = 0, y = -40, scale = 1.00 },
@@ -41,6 +43,7 @@ addon.unitButtons = {}
 addon.pendingSpellRefresh = false
 addon.pendingLayoutRefresh = false
 addon.pendingRaidSizeRefresh = false
+addon.pendingNameBandRefresh = false
 addon.dispelCooldownActive = nil
 
 local PositionRaidButtons
@@ -100,7 +103,7 @@ local function InitializeDatabase()
         SimpleDispelDB = {}
     end
 
-    SimpleDispelDB.schemaVersion = 4
+    SimpleDispelDB.schemaVersion = 5
     SimpleDispelDB.filterMode = SimpleDispelDB.filterMode or "mine"
     -- Databases written before the theme option carry no theme field. Falling
     -- back to the dark default keeps an upgrade visually identical to 1.2.x
@@ -110,6 +113,11 @@ local function InitializeDatabase()
     end
     if type(SimpleDispelDB.locked) ~= "boolean" then
         SimpleDispelDB.locked = false
+    end
+    -- Databases written before this option carry no field, so party names stay
+    -- visible on upgrade until the player hides them with /sd names hide.
+    if type(SimpleDispelDB.hidePartyNames) ~= "boolean" then
+        SimpleDispelDB.hidePartyNames = false
     end
     if type(SimpleDispelDB.layouts) ~= "table" then
         SimpleDispelDB.layouts = {}
@@ -420,14 +428,58 @@ local function UpdateGroupLabels()
     end
 end
 
+local function PartyNamesShown()
+    return not (addon.db and addon.db.hidePartyNames)
+end
+
+local function GetPartyFrameHeight()
+    local bandHeight = PartyNamesShown() and PARTY_LABEL_HEIGHT or 0
+    return PARTY_BUTTON_SIZE + bandHeight + HANDLE_HEIGHT + (FRAME_PADDING * 2)
+end
+
+-- Hiding the names collapses a band that is part of each party button's own
+-- height, and a party button is a protected action button, so this is deferred
+-- out of combat like every other layout change. Only the button plate and the
+-- frame around it change size: the icon area, and with it the debuff icon and
+-- its aura container, occupies the same square either way.
+local function ApplyPartyNameBand()
+    if InCombatLockdown() then
+        addon.pendingNameBandRefresh = true
+        return false
+    end
+
+    local shown = PartyNamesShown()
+    for _, unit in ipairs(PARTY_UNITS) do
+        local button = addon.unitButtons[unit]
+        if button then
+            addon.SecureButtons:SetNameBandShown(button, shown)
+        end
+    end
+
+    local frameInfo = addon.frames.party
+    if frameInfo then
+        frameInfo.root:SetHeight(GetPartyFrameHeight())
+    end
+
+    addon.pendingNameBandRefresh = false
+    return true
+end
+
 local function CreatePartyUI(filterString)
     local definitions = {
-        { unit = "player", name = "SimpleDispelPlayerButton", label = "YOU", labelMode = "BOTTOM", iconBottomInset = PARTY_LABEL_HEIGHT },
-        { unit = "party1", name = "SimpleDispelParty1Button", label = "P1", labelMode = "BOTTOM", iconBottomInset = PARTY_LABEL_HEIGHT },
-        { unit = "party2", name = "SimpleDispelParty2Button", label = "P2", labelMode = "BOTTOM", iconBottomInset = PARTY_LABEL_HEIGHT },
-        { unit = "party3", name = "SimpleDispelParty3Button", label = "P3", labelMode = "BOTTOM", iconBottomInset = PARTY_LABEL_HEIGHT },
-        { unit = "party4", name = "SimpleDispelParty4Button", label = "P4", labelMode = "BOTTOM", iconBottomInset = PARTY_LABEL_HEIGHT },
+        { unit = "player", name = "SimpleDispelPlayerButton", label = "YOU", labelMode = "BOTTOM" },
+        { unit = "party1", name = "SimpleDispelParty1Button", label = "P1", labelMode = "BOTTOM" },
+        { unit = "party2", name = "SimpleDispelParty2Button", label = "P2", labelMode = "BOTTOM" },
+        { unit = "party3", name = "SimpleDispelParty3Button", label = "P3", labelMode = "BOTTOM" },
+        { unit = "party4", name = "SimpleDispelParty4Button", label = "P4", labelMode = "BOTTOM" },
     }
+    -- The aura container covers the square icon area at the top of the button
+    -- rather than the whole cell, so the name band underneath it can collapse
+    -- without moving a debuff icon whose geometry is fixed at creation time.
+    for _, definition in ipairs(definitions) do
+        definition.auraHeight = PARTY_BUTTON_SIZE
+        definition.auraAnchor = "TOP"
+    end
     local width = (PARTY_BUTTON_SIZE * #definitions)
         + (PARTY_GAP * (#definitions - 1))
         + (FRAME_PADDING * 2)
@@ -453,6 +505,10 @@ local function CreatePartyUI(filterString)
         local x = FRAME_PADDING + ((index - 1) * (PARTY_BUTTON_SIZE + PARTY_GAP))
         button:SetPoint("TOPLEFT", frameInfo.content, "TOPLEFT", x, -(HANDLE_HEIGHT + FRAME_PADDING))
     end
+
+    -- Every party button is built with its name band, so this is what collapses
+    -- them again when the saved setting hides the names.
+    ApplyPartyNameBand()
 end
 
 local function GetRaidRows()
@@ -722,10 +778,11 @@ local function PrintStatus()
         tostring(addon.db.locked)
     ))
     Print(string.format(
-        "partyScale=%.2f raidScale=%.2f theme=%s",
+        "partyScale=%.2f raidScale=%.2f theme=%s partyNames=%s",
         addon.db.layouts.party.scale or 1,
         addon.db.layouts.raid.scale or 1,
-        addon.Theme:GetActive()
+        addon.Theme:GetActive(),
+        PartyNamesShown() and "shown" or "hidden"
     ))
 
     if spell then
@@ -757,6 +814,7 @@ local function PrintHelp()
     Print("/sd spell auto | /sd spell <spellID>")
     Print("/sd filter <" .. FILTER_HELP .. "> (then /reload)")
     Print("/sd theme <" .. THEME_HELP .. ">")
+    Print("/sd names <show|hide>")
     Print("/sd lock | /sd unlock")
     Print("/sd scale <0.60-2.00> [party|raid]")
     Print("/sd reset [party|raid|all]")
@@ -812,6 +870,33 @@ local function HandleThemeCommand(argument)
     addon.db.theme = argument
     ApplyTheme()
     Print("theme set to " .. argument)
+end
+
+local function HandleNamesCommand(argument)
+    if argument == "" then
+        Print("party names are " .. (PartyNamesShown() and "shown" or "hidden")
+            .. "; use /sd names <show|hide>")
+        return
+    end
+
+    local hidden
+    if argument == "show" or argument == "on" then
+        hidden = false
+    elseif argument == "hide" or argument == "off" then
+        hidden = true
+    else
+        Print("usage: /sd names <show|hide>")
+        return
+    end
+
+    addon.db.hidePartyNames = hidden
+    ApplyPartyNameBand()
+    Print(hidden
+        and "party names hidden; party buttons are square"
+        or "party names shown below each party button")
+    if InCombatLockdown() then
+        Print("layout will update after combat")
+    end
 end
 
 local function HandleLockCommand(locked)
@@ -892,6 +977,8 @@ local function HandleSlashCommand(message)
         HandleFilterCommand(argument)
     elseif command == "theme" then
         HandleThemeCommand(argument)
+    elseif command == "names" then
+        HandleNamesCommand(argument)
     elseif command == "lock" then
         HandleLockCommand(true)
     elseif command == "unlock" then
@@ -988,6 +1075,9 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         end
         if addon.pendingRaidSizeRefresh then
             RefreshRaidFrameSize()
+        end
+        if addon.pendingNameBandRefresh then
+            ApplyPartyNameBand()
         end
     elseif event == "SPELL_UPDATE_COOLDOWN" then
         addon:RefreshCooldownState(true)

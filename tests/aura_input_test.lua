@@ -42,7 +42,10 @@ local function NewRegion()
     function region:SetAllPoints()
     end
 
-    function region:SetPoint()
+    function region:SetPoint(...)
+        local points = self.points or {}
+        points[#points + 1] = { ... }
+        self.points = points
     end
 
     function region:ClearAllPoints()
@@ -190,15 +193,24 @@ assert(
     "the icon crop must stay centred on the source art"
 )
 
--- The party name band now sits below the icon instead of inside it, so a real
--- party button's icon area is square again and must not be cropped at all.
+-- A real party button covers only the square icon area at the top of the cell,
+-- leaving the name band below it out of the aura button entirely, so the icon
+-- is square again and must not be cropped at all.
 local partyContainer, partyError = addon.AuraDisplay:Create(
     owner,
     "party1",
     "HARMFUL|RAID",
-    { width = 48, height = 62, iconBottomInset = 14, showDuration = true }
+    { width = 48, height = 48, anchor = "TOP", showDuration = true }
 )
 assert(partyContainer, tostring(partyError))
+
+-- The name band is part of the unit button, not of the aura button, so the
+-- duration has to hang below the unit button: anchoring it below the aura
+-- button would drop it onto the name whenever the band is shown.
+local durationPoint = initializedAuraButton.duration.points[1]
+assert(durationPoint[1] == "TOP", "duration text must hang below the cell")
+assert(durationPoint[2] == owner, "duration text must be anchored to the unit button")
+assert(durationPoint[3] == "BOTTOM", "duration text must be anchored below the unit button")
 
 local partyCoords = initializedAuraButton.icon.texCoord
 assert(

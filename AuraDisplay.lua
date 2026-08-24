@@ -116,7 +116,7 @@ local function AddIconContour(auraButton, cooldown, iconBottomInset)
     return contour
 end
 
-local function CreateAuraButtonInitializer(auraWidth, auraHeight, showDuration, iconBottomInset)
+local function CreateAuraButtonInitializer(owner, auraWidth, auraHeight, showDuration, iconBottomInset)
     return function(auraButton)
         -- AuraButton surface methods may become forbidden after this callback.
         -- All setup is intentionally completed inside the initialization window.
@@ -165,7 +165,10 @@ local function CreateAuraButtonInitializer(auraWidth, auraHeight, showDuration, 
         local duration
         if showDuration then
             duration = auraButton:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmallOutline")
-            duration:SetPoint("TOP", auraButton, "BOTTOM", 0, -2)
+            -- Anchor the duration under the unit button, not under the aura
+            -- button: the aura button covers only the icon area, and how much
+            -- of the cell that is depends on whether the name band is shown.
+            duration:SetPoint("TOP", owner, "BOTTOM", 0, -2)
         end
 
         auraButton:SetIcon(icon)
@@ -229,7 +232,7 @@ function AuraDisplay:Create(owner, unit, filterString, options)
     container:SetPoint(anchor, owner, anchor)
 
     local slotOK, auraButton = pcall(container.AddAuraSlot, container, "dispel", filterString, {
-        initializeFrame = CreateAuraButtonInitializer(auraWidth, auraHeight, showDuration, iconBottomInset),
+        initializeFrame = CreateAuraButtonInitializer(owner, auraWidth, auraHeight, showDuration, iconBottomInset),
     })
     if not slotOK then
         container:Hide()

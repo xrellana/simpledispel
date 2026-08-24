@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.0 — 2026-08-24
+
+- Add `/sd names show` and `/sd names hide`. Hiding the names collapses the 14-pixel name band under each party button, so the party buttons become 48 × 48 squares again and the party frame shrinks by the same 14 pixels. Party members are then identified the way raid members already are, by the normal unit-button tooltip. `/sd names` on its own prints the current setting, and `/sd status` reports it as `partyNames=`.
+- The setting is saved per account in the new `SimpleDispelDB.hidePartyNames` field and defaults to showing the names, so upgrading from 1.3.x is visually silent until the command is used. SavedVariables schema raised from 4 to 5.
+- Nothing inside the icon square moves when the band is collapsed: the debuff icon, its stack count, the dispel spell watermark, and the duration text keep the exact geometry they have with the band shown. To make that possible, the party Aura Container now covers only the 48 × 48 icon area at the top of the button instead of the whole cell, and the duration text is anchored below the unit button rather than below the aura button. Both produce pixel-identical output to 1.3.3 while the band is shown.
+- Collapsing or restoring the band changes the height of protected action buttons, so unlike `/sd theme` it is subject to combat lockdown. A change requested during combat is applied automatically when combat ends.
+
 ## 1.3.3 — 2026-08-23
 
 - Keep the dispel spell watermark square on party buttons. The name band added in 1.3.2 made the button taller than it is wide, and the watermark filled the whole button, so that art — a square spell icon — was stretched vertically. It now ends above the name band, occupying the same square area as the debuff icon drawn on top of it. Raid squares carry no name band and are unaffected.

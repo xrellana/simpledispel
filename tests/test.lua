@@ -236,6 +236,14 @@ addon.SecureButtons = {
         createdButtons[#createdButtons + 1] = button
         return button
     end,
+    SetNameBandShown = function(_, button, shown)
+        if InCombatLockdown() then
+            return false, "combat-lockdown"
+        end
+        button.nameBandShown = shown
+        button:SetHeight(button.requestedHeight - (shown and 0 or 14))
+        return true
+    end,
     RaiseRangeOverlay = function(_, button)
         button.rangeOverlayRaised = true
     end,
@@ -314,7 +322,7 @@ assert(eventFrame, "ADDON_LOADED event frame was not created")
 
 eventFrame.scripts.OnEvent(eventFrame, "ADDON_LOADED", "SimpleDispel")
 
-assert(SimpleDispelDB.schemaVersion == 4, "database schema was not upgraded")
+assert(SimpleDispelDB.schemaVersion == 5, "database schema was not upgraded")
 assert(SimpleDispelDB.theme == "dark", "a database without a theme must upgrade to dark")
 assert(addon.Theme:GetActive() == "dark", "dark must be the default theme")
 assert(
@@ -382,10 +390,14 @@ assert(rawget(createdButtons[6], "labelMode") == nil, "compact raid button must 
 assert(addon.auraContainers[6].options.width == 28, "raid aura width is wrong")
 assert(addon.auraContainers[6].options.height == 28, "raid aura height is wrong")
 assert(addon.auraContainers[6].options.anchor == "CENTER", "raid aura must fill the compact square")
-assert(addon.auraContainers[1].options.height == 62, "party aura height must match the taller party button")
+-- The party aura covers the square icon area at the top of the button instead
+-- of the whole cell, so the name band below it can be collapsed without moving
+-- a debuff icon whose geometry is fixed when the aura button is created.
+assert(addon.auraContainers[1].options.height == 48, "party aura must cover the icon square only")
+assert(addon.auraContainers[1].options.anchor == "TOP", "party aura must sit at the top of the button")
 assert(
-    addon.auraContainers[1].options.iconBottomInset == 14,
-    "party aura icon area must reserve the dedicated label band"
+    (addon.auraContainers[1].options.iconBottomInset or 0) == 0,
+    "a top-anchored party aura reserves no band inside its own icon area"
 )
 assert(createdButtons[6].rangeOverlayRaised, "range overlay must be raised above the aura")
 
@@ -414,6 +426,42 @@ assert(partyVisibility == "[group:raid] hide; show", "party visibility driver is
 assert(raidVisibility == "[group:raid] show; hide", "raid visibility driver is wrong")
 assert(raidRoot.width == 246, "compact raid frame width is wrong")
 assert(addon.frames.party.root.height == 92, "party frame must grow to fit the dedicated label band")
+
+-- Party names are shown by default, so an upgrade keeps the 1.3.x appearance.
+assert(SimpleDispelDB.hidePartyNames == false, "party names must be shown by default")
+assert(createdButtons[1].nameBandShown == true, "party buttons must be built with their name band")
+
+SlashCmdList.SIMPLEDISPEL("names hide")
+assert(SimpleDispelDB.hidePartyNames == true, "names command did not persist")
+assert(createdButtons[1].nameBandShown == false, "hiding names did not collapse the player band")
+assert(createdButtons[5].nameBandShown == false, "hiding names did not collapse the party4 band")
+assert(createdButtons[1].height == 48, "a party button without its name band must be square")
+assert(addon.frames.party.root.height == 78, "the party frame must shrink with the collapsed band")
+assert(
+    rawget(createdButtons[6], "nameBandShown") == nil,
+    "raid squares carry no name band and must not be resized"
+)
+
+SlashCmdList.SIMPLEDISPEL("names show")
+assert(SimpleDispelDB.hidePartyNames == false, "showing names again did not persist")
+assert(createdButtons[1].height == 62, "restoring the band must restore the button height")
+assert(addon.frames.party.root.height == 92, "restoring the band must restore the frame height")
+
+SlashCmdList.SIMPLEDISPEL("names sideways")
+assert(SimpleDispelDB.hidePartyNames == false, "an unrecognised names argument must change nothing")
+
+-- Collapsing the band resizes protected action buttons, so unlike a theme
+-- switch it has to wait for combat to end.
+inCombat = true
+SlashCmdList.SIMPLEDISPEL("names hide")
+assert(addon.pendingNameBandRefresh == true, "combat name band change was not deferred")
+assert(addon.frames.party.root.height == 92, "party frame resized during combat")
+assert(createdButtons[1].height == 62, "party button resized during combat")
+inCombat = false
+eventFrame.scripts.OnEvent(eventFrame, "PLAYER_REGEN_ENABLED")
+assert(addon.pendingNameBandRefresh == false, "deferred name band change was not applied")
+assert(addon.frames.party.root.height == 78, "deferred name band change did not resize the frame")
+SlashCmdList.SIMPLEDISPEL("names show")
 assert(addon.frames.raid.dragHandle.width == 28, "raid drag handle must stay compact")
 assert(addon.frames.raid.dragHandle.height == 22, "raid drag handle height is wrong")
 

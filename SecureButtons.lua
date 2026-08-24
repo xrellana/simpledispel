@@ -205,6 +205,13 @@ function SecureButtons:Create(parent, globalName, unit, shortLabel, requestedWid
     button.simpleDispelBorder = border
     button.simpleDispelSpellTexture = spellTexture
     button.simpleDispelLabel = label
+    -- A BOTTOM label owns a band of the button's own height. Record the icon
+    -- area above it now, so the band can be collapsed later without having to
+    -- recover it from a height that has already changed.
+    if labelMode == "BOTTOM" then
+        button.simpleDispelIconHeight = buttonHeight - LABEL_BAND_HEIGHT
+        button.simpleDispelNameBandShown = true
+    end
     button.simpleDispelFallbackLabel = shortLabel
     button.simpleDispelUnit = unit
     button.simpleDispelHasSpell = false
@@ -247,6 +254,27 @@ function SecureButtons:ApplyTheme(button)
     addon.Theme:ApplyText(button.simpleDispelCooldownMark, colors.cooldownMark, colors.markFont)
 
     ApplyVisualState(button)
+end
+
+-- Collapsing the name band changes the height of a protected action button, so
+-- this is out-of-combat work like every other layout change. The icon area above
+-- the band keeps exactly the geometry it has while the band is shown, which is
+-- what lets the debuff icon and its aura container stay untouched by the toggle.
+function SecureButtons:SetNameBandShown(button, shown)
+    local iconHeight = button and button.simpleDispelIconHeight
+    if not iconHeight then
+        return false, "no-name-band"
+    end
+    if InCombatLockdown() then
+        return false, "combat-lockdown"
+    end
+
+    shown = shown and true or false
+    button.simpleDispelNameBandShown = shown
+    button:SetHeight(iconHeight + (shown and LABEL_BAND_HEIGHT or 0))
+    button.simpleDispelSpellTexture:SetHeight(iconHeight)
+    button.simpleDispelLabel:SetShown(shown)
+    return true
 end
 
 function SecureButtons:RaiseRangeOverlay(button, visualFrame)
