@@ -13,6 +13,9 @@ local RAID_COLUMNS = 8
 local PARTY_GAP = 6
 local RAID_GAP = 2
 local FRAME_PADDING = 4
+-- Floor for the compact raid frame width: below two columns the drag handle
+-- and its "SD" title have nowhere to sit without overlapping the buttons.
+local RAID_MIN_WIDTH = (RAID_BUTTON_SIZE * 2) + RAID_GAP + (FRAME_PADDING * 2)
 local HANDLE_HEIGHT = 22
 local RANGE_UPDATE_INTERVAL = 0.25
 local EMPTY_STATE_HEIGHT = HANDLE_HEIGHT + (FRAME_PADDING * 2) + 40
@@ -103,8 +106,14 @@ local function InitializeDatabase()
         SimpleDispelDB = {}
     end
 
-    SimpleDispelDB.schemaVersion = 5
+    SimpleDispelDB.schemaVersion = 6
     SimpleDispelDB.filterMode = SimpleDispelDB.filterMode or "mine"
+    -- Databases written before subgroup-sorted layout existed carry no field,
+    -- so they default to "across", which preserves the pre-1.4 wide footprint
+    -- instead of silently switching everyone to the taller "down" layout.
+    if SimpleDispelDB.raidLayout ~= "across" and SimpleDispelDB.raidLayout ~= "down" then
+        SimpleDispelDB.raidLayout = "across"
+    end
     -- Databases written before the theme option carry no theme field. Falling
     -- back to the dark default keeps an upgrade visually identical to 1.2.x
     -- until the player opts in with /sd theme light.
@@ -511,13 +520,64 @@ local function CreatePartyUI(filterString)
     ApplyPartyNameBand()
 end
 
-local function GetRaidRows()
+-- issecretvalue/canaccessvalue are only present on clients that can hand back
+-- secret combat-log-style values; every read of a Blizzard API result that
+-- feeds a decision must be filtered through this before use.
+local function IsAccessibleValue(value)
+    if type(issecretvalue) == "function" then
+        local ok, secret = pcall(issecretvalue, value)
+        if ok and secret then
+            return false
+        end
+    end
+    if type(canaccessvalue) == "function" then
+        local ok, accessible = pcall(canaccessvalue, value)
+        if ok and not accessible then
+            return false
+        end
+    end
+    return true
+end
+
+-- Subgroup layout is only ever built from a fully valid roster snapshot.
+-- Sorting all-or-nothing avoids a partially-sorted grid where one unreadable
+-- or malformed subgroup value would scatter that single member across the
+-- layout while everyone else lines up normally; the index-order fallback
+-- below is deterministic and far less surprising.
+local function GetRaidSubgroups()
+    if type(GetRaidRosterInfo) ~= "function" then
+        return nil
+    end
+    if not (IsInRaid and IsInRaid()) then
+        return nil
+    end
+
     local memberCount = 0
     if GetNumGroupMembers then
         memberCount = tonumber(GetNumGroupMembers()) or 0
     end
-    memberCount = math.max(1, math.min(40, memberCount))
-    return math.ceil(memberCount / RAID_COLUMNS)
+    memberCount = math.min(40, memberCount)
+    if memberCount <= 0 then
+        return nil
+    end
+
+    local groups = {}
+    for index = 1, memberCount do
+        local ok, _, _, subgroup = pcall(GetRaidRosterInfo, index)
+        if not ok or not IsAccessibleValue(subgroup)
+            or type(subgroup) ~= "number" or subgroup < 1 or subgroup > 8 then
+            return nil
+        end
+
+        local list = groups[subgroup]
+        if not list then
+            list = {}
+            groups[subgroup] = list
+        end
+        list[#list + 1] = index
+    end
+
+    return groups
 end
 
 local function GetRaidTopInset()
@@ -527,8 +587,75 @@ local function GetRaidTopInset()
     return HANDLE_HEIGHT
 end
 
-local function GetRaidFrameHeight()
-    local rows = GetRaidRows()
+-- Builds the raid grid once per refresh instead of once per button: every
+-- raid index gets a cell so state-driver-hidden buttons still resolve to a
+-- deterministic point, but only indices with a real roster slot influence
+-- the reported column/row counts.
+local function BuildRaidLayoutPlan()
+    local memberCount = 0
+    if GetNumGroupMembers then
+        memberCount = tonumber(GetNumGroupMembers()) or 0
+    end
+
+    local cells = {}
+    for index = 1, 40 do
+        cells[index] = {
+            column = (index - 1) % RAID_COLUMNS,
+            row = math.floor((index - 1) / RAID_COLUMNS),
+        }
+    end
+
+    local fallbackColumns = math.min(RAID_COLUMNS, math.max(1, memberCount))
+    local fallbackRows = math.ceil(math.max(1, math.min(40, memberCount)) / RAID_COLUMNS)
+
+    local groups = GetRaidSubgroups()
+    addon.raidGroupsUnavailable = groups == nil
+    if not groups then
+        return cells, fallbackColumns, fallbackRows
+    end
+
+    local occupiedGroups = {}
+    for groupNumber in pairs(groups) do
+        occupiedGroups[#occupiedGroups + 1] = groupNumber
+    end
+    table.sort(occupiedGroups)
+
+    local maxGroupSize = 0
+    for _, groupNumber in ipairs(occupiedGroups) do
+        maxGroupSize = math.max(maxGroupSize, #groups[groupNumber])
+    end
+
+    local orientation = addon.db and addon.db.raidLayout
+    for groupSlotIndex, groupNumber in ipairs(occupiedGroups) do
+        local groupSlot = groupSlotIndex - 1
+        for memberSlotIndex, raidIndex in ipairs(groups[groupNumber]) do
+            local memberSlot = memberSlotIndex - 1
+            if orientation == "down" then
+                cells[raidIndex] = { column = memberSlot, row = groupSlot }
+            else
+                cells[raidIndex] = { column = groupSlot, row = memberSlot }
+            end
+        end
+    end
+
+    local columns, rows
+    if orientation == "down" then
+        columns, rows = math.max(1, maxGroupSize), math.max(1, #occupiedGroups)
+    else
+        columns, rows = math.max(1, #occupiedGroups), math.max(1, maxGroupSize)
+    end
+
+    return cells, columns, rows
+end
+
+local function GetRaidFrameWidth(columns)
+    local width = (RAID_BUTTON_SIZE * columns)
+        + (RAID_GAP * (columns - 1))
+        + (FRAME_PADDING * 2)
+    return math.max(RAID_MIN_WIDTH, width)
+end
+
+local function GetRaidFrameHeight(rows)
     return (RAID_BUTTON_SIZE * rows)
         + (RAID_GAP * (rows - 1))
         + GetRaidTopInset()
@@ -546,13 +673,13 @@ PositionRaidButtons = function()
         return
     end
     local topInset = GetRaidTopInset()
+    local cells = BuildRaidLayoutPlan()
     for index = 1, 40 do
         local button = addon.unitButtons["raid" .. index]
         if button then
-            local column = (index - 1) % RAID_COLUMNS
-            local row = math.floor((index - 1) / RAID_COLUMNS)
-            local x = FRAME_PADDING + (column * (RAID_BUTTON_SIZE + RAID_GAP))
-            local y = -(topInset + FRAME_PADDING + (row * (RAID_BUTTON_SIZE + RAID_GAP)))
+            local cell = cells[index]
+            local x = FRAME_PADDING + (cell.column * (RAID_BUTTON_SIZE + RAID_GAP))
+            local y = -(topInset + FRAME_PADDING + (cell.row * (RAID_BUTTON_SIZE + RAID_GAP)))
             button:ClearAllPoints()
             button:SetPoint("TOPLEFT", frameInfo.content, "TOPLEFT", x, y)
         end
@@ -569,16 +696,26 @@ RefreshRaidFrameSize = function()
         return
     end
 
-    local height = addon.activeSpell and GetRaidFrameHeight() or EMPTY_STATE_HEIGHT
+    local width, height
+    if addon.activeSpell then
+        local _, columns, rows = BuildRaidLayoutPlan()
+        width = GetRaidFrameWidth(columns)
+        height = GetRaidFrameHeight(rows)
+    else
+        -- The empty state only ever shows explanatory text, so it always uses
+        -- the full default 8-column width regardless of roster shape.
+        width = GetRaidFrameWidth(RAID_COLUMNS)
+        height = EMPTY_STATE_HEIGHT
+    end
+    frameInfo.root:SetWidth(width)
     frameInfo.root:SetHeight(height)
     addon.pendingRaidSizeRefresh = false
 end
 
 local function CreateRaidUI(filterString)
-    local width = (RAID_BUTTON_SIZE * RAID_COLUMNS)
-        + (RAID_GAP * (RAID_COLUMNS - 1))
-        + (FRAME_PADDING * 2)
-    local height = addon.activeSpell and GetRaidFrameHeight() or EMPTY_STATE_HEIGHT
+    local _, planColumns, planRows = BuildRaidLayoutPlan()
+    local width = addon.activeSpell and GetRaidFrameWidth(planColumns) or GetRaidFrameWidth(RAID_COLUMNS)
+    local height = addon.activeSpell and GetRaidFrameHeight(planRows) or EMPTY_STATE_HEIGHT
     local frameInfo = CreateRoot(
         "raid",
         "SimpleDispelRaidFrame",
@@ -621,22 +758,6 @@ local function UpdateDispelAvailability(spell)
         raidFrame.background:SetShown(not addon.db.locked or not hasDispel)
     end
     RefreshRaidFrameSize()
-end
-
-local function IsAccessibleValue(value)
-    if type(issecretvalue) == "function" then
-        local ok, secret = pcall(issecretvalue, value)
-        if ok and secret then
-            return false
-        end
-    end
-    if type(canaccessvalue) == "function" then
-        local ok, accessible = pcall(canaccessvalue, value)
-        if ok and not accessible then
-            return false
-        end
-    end
-    return true
 end
 
 local function IsRangeUnitActive(unit, layoutKey)
@@ -784,6 +905,11 @@ local function PrintStatus()
         addon.Theme:GetActive(),
         PartyNamesShown() and "shown" or "hidden"
     ))
+    Print(string.format(
+        "raidLayout=%s raidGroups=%s",
+        addon.db.raidLayout,
+        addon.raidGroupsUnavailable and "unavailable" or "sorted"
+    ))
 
     if spell then
         local cooldownStatus = "unknown"
@@ -815,6 +941,7 @@ local function PrintHelp()
     Print("/sd filter <" .. FILTER_HELP .. "> (then /reload)")
     Print("/sd theme <" .. THEME_HELP .. ">")
     Print("/sd names <show|hide>")
+    Print("/sd raidlayout <across|down>")
     Print("/sd lock | /sd unlock")
     Print("/sd scale <0.60-2.00> [party|raid]")
     Print("/sd reset [party|raid|all]")
@@ -894,6 +1021,26 @@ local function HandleNamesCommand(argument)
     Print(hidden
         and "party names hidden; party buttons are square"
         or "party names shown below each party button")
+    if InCombatLockdown() then
+        Print("layout will update after combat")
+    end
+end
+
+local function HandleRaidLayoutCommand(argument)
+    if argument == "" then
+        Print("raid layout is " .. addon.db.raidLayout .. "; use /sd raidlayout <across|down>")
+        return
+    end
+
+    if argument ~= "across" and argument ~= "down" then
+        Print("usage: /sd raidlayout <across|down>")
+        return
+    end
+
+    addon.db.raidLayout = argument
+    PositionRaidButtons()
+    RefreshRaidFrameSize()
+    Print("raid layout set to " .. argument)
     if InCombatLockdown() then
         Print("layout will update after combat")
     end
@@ -979,6 +1126,8 @@ local function HandleSlashCommand(message)
         HandleThemeCommand(argument)
     elseif command == "names" then
         HandleNamesCommand(argument)
+    elseif command == "raidlayout" then
+        HandleRaidLayoutCommand(argument)
     elseif command == "lock" then
         HandleLockCommand(true)
     elseif command == "unlock" then
@@ -1044,6 +1193,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
     if event == "PLAYER_LOGIN" then
         addon:RefreshSpell()
         UpdateGroupLabels()
+        PositionRaidButtons()
         RefreshRaidFrameSize()
         if addon.activeSpell then
             Print("v" .. GetAddonVersion() .. " loaded; party + raid ready; use /sd status")
@@ -1055,9 +1205,13 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         -- the player enters the world.
         addon:RefreshSpell()
         UpdateGroupLabels()
+        PositionRaidButtons()
         RefreshRaidFrameSize()
     elseif event == "GROUP_ROSTER_UPDATE" then
         UpdateGroupLabels()
+        -- Group membership changes can move members between subgroups, which
+        -- changes their cell in the layout, not just which buttons are shown.
+        PositionRaidButtons()
         RefreshRaidFrameSize()
         addon:RefreshRangeState()
     elseif event == "UNIT_NAME_UPDATE" then

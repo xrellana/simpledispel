@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.0 — 2026-08-27
+
+- The raid frame now lays its 40 buttons out by subgroup instead of by raw raid roster index. Occupied subgroups are compressed side by side with no gap left for an empty one in between (for example groups 1, 2 and 5 become three adjacent columns), and a group's members pack to the top of their column or row with no interior holes.
+- Add `/sd raidlayout across` and `/sd raidlayout down` to choose the orientation: `across` puts each subgroup in its own column with members stacked in rows beneath it (the wide layout, and the default); `down` puts each subgroup in its own row with members spread across columns. `/sd raidlayout` on its own prints the current setting, and `/sd status` reports it as `raidLayout=` alongside `raidGroups=sorted` or `raidGroups=unavailable`.
+- The raid frame now sizes its width to the number of occupied columns as well as its height to the number of rows, floored at a minimum two-button width so the compact drag handle and its "SD" title are never cramped.
+- If subgroup data cannot be read for every raid member, the frame falls back to the original index-ordered 8-column grid for the whole roster rather than sorting some members and not others. This is saved per account in the new `SimpleDispelDB.raidLayout` field; databases written before this option default to `across`, which preserves the pre-1.4 wide footprint. SavedVariables schema raised from 5 to 6.
+
 ## 1.4.0 — 2026-08-24
 
 - Add `/sd names show` and `/sd names hide`. Hiding the names collapses the 14-pixel name band under each party button, so the party buttons become 48 × 48 squares again and the party frame shrinks by the same 14 pixels. Party members are then identified the way raid members already are, by the normal unit-button tooltip. `/sd names` on its own prints the current setting, and `/sd status` reports it as `partyNames=`.

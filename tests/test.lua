@@ -50,6 +50,10 @@ function objectMethods:SetHeight(height)
     self.height = height
 end
 
+function objectMethods:SetWidth(width)
+    self.width = width
+end
+
 function objectMethods:SetShown(shown)
     self.shown = shown
 end
@@ -153,6 +157,16 @@ end
 
 function GetNumGroupMembers()
     return groupMemberCount
+end
+
+-- Configured per-scenario via raidRosterInfo[index] = subgroup. An index with
+-- no entry reports a nil subgroup, which the addon must treat the same as a
+-- malformed one: the whole layout falls back to index order.
+local raidRosterInfo = {}
+
+function GetRaidRosterInfo(index)
+    local subgroup = raidRosterInfo[index]
+    return "RaidMember" .. index, "MEMBER", subgroup
 end
 
 function UnitExists(unit)
@@ -322,7 +336,8 @@ assert(eventFrame, "ADDON_LOADED event frame was not created")
 
 eventFrame.scripts.OnEvent(eventFrame, "ADDON_LOADED", "SimpleDispel")
 
-assert(SimpleDispelDB.schemaVersion == 5, "database schema was not upgraded")
+assert(SimpleDispelDB.schemaVersion == 6, "database schema was not upgraded")
+assert(SimpleDispelDB.raidLayout == "across", "a database without a raid layout must default to across")
 assert(SimpleDispelDB.theme == "dark", "a database without a theme must upgrade to dark")
 assert(addon.Theme:GetActive() == "dark", "dark must be the default theme")
 assert(
@@ -592,6 +607,95 @@ assert(not addon.pendingRaidSizeRefresh, "deferred raid resize was not applied")
 assert(raidRoot.height == 178, "40-player raid frame must use five rows")
 
 assert(eventFrame.events.PLAYER_REGEN_DISABLED, "combat start event was not registered")
+
+-- Subgroup-sorted raid layout -------------------------------------------------
+-- raid1 is createdButtons[6] (five party buttons come first); this indexes
+-- straight into the raid roster position for a given raid unit index.
+local function RaidPoint(raidIndex)
+    return createdButtons[5 + raidIndex].point
+end
+
+-- Scenario 1: three full groups of five, "across" (the default orientation).
+raidRosterInfo = {}
+for i = 1, 5 do raidRosterInfo[i] = 1 end
+for i = 6, 10 do raidRosterInfo[i] = 2 end
+for i = 11, 15 do raidRosterInfo[i] = 3 end
+groupMemberCount = 15
+SlashCmdList.SIMPLEDISPEL("raidlayout across")
+
+assert(addon.raidGroupsUnavailable == false, "a fully valid roster must not report subgroups unavailable")
+assert(RaidPoint(1)[4] == RaidPoint(5)[4], "raid1 through raid5 must share a column in across mode")
+assert(RaidPoint(1)[5] ~= RaidPoint(2)[5], "members within a group occupy distinct rows")
+assert(RaidPoint(6)[4] ~= RaidPoint(1)[4], "raid6 must start the next occupied column")
+assert(RaidPoint(6)[5] == RaidPoint(1)[5], "the first member of every group starts at row 0")
+assert(raidRoot.width == 96, "three occupied groups across must produce a three-column frame")
+assert(raidRoot.height == 178, "a five-member group must produce a five-row frame")
+
+-- Scenario 2: the same roster transposed with "down".
+SlashCmdList.SIMPLEDISPEL("raidlayout down")
+assert(RaidPoint(1)[5] == RaidPoint(2)[5], "down mode holds the first member of every group on row 0")
+assert(RaidPoint(1)[4] ~= RaidPoint(2)[4], "down mode spreads a group's members across columns")
+assert(RaidPoint(6)[5] ~= RaidPoint(1)[5], "down mode starts the next occupied group on its own row")
+assert(RaidPoint(6)[4] == RaidPoint(1)[4], "down mode returns every group to column 0")
+assert(raidRoot.width == 156, "down mode sizes columns to the largest group")
+assert(raidRoot.height == 118, "down mode sizes rows to the occupied group count")
+
+-- Scenario 3: compression. Groups 1, 2 and 5 are occupied; group 5 must land
+-- in the third column, not the fifth, and groups 3/4 leave no gap behind.
+SlashCmdList.SIMPLEDISPEL("raidlayout across")
+raidRosterInfo = {}
+for i = 1, 5 do raidRosterInfo[i] = 1 end
+for i = 6, 10 do raidRosterInfo[i] = 2 end
+raidRosterInfo[11] = 5
+groupMemberCount = 11
+eventFrame.scripts.OnEvent(eventFrame, "GROUP_ROSTER_UPDATE")
+
+assert(RaidPoint(1)[4] == 4, "group 1 must anchor at column 0")
+assert(RaidPoint(6)[4] == 34, "group 2 must anchor at column 1")
+assert(RaidPoint(11)[4] == 64, "group 5 must compress into column 2 instead of column 4")
+assert(raidRoot.width == 96, "compression must still only report three occupied columns")
+assert(raidRoot.height == 178, "the largest occupied group still drives the row count")
+
+-- Scenario 4: a non-full group leaves its trailing rows empty and must not
+-- pull the next group's members up into them.
+raidRosterInfo = {}
+for i = 1, 3 do raidRosterInfo[i] = 1 end
+for i = 4, 8 do raidRosterInfo[i] = 2 end
+groupMemberCount = 8
+eventFrame.scripts.OnEvent(eventFrame, "GROUP_ROSTER_UPDATE")
+
+assert(RaidPoint(4)[4] ~= RaidPoint(1)[4], "group 2 must occupy its own column")
+assert(RaidPoint(4)[5] == RaidPoint(1)[5], "group 2 still starts at row 0 regardless of group 1's size")
+assert(
+    RaidPoint(1)[5] ~= RaidPoint(2)[5] and RaidPoint(2)[5] ~= RaidPoint(3)[5],
+    "the short group's three members occupy three consecutive rows"
+)
+assert(raidRoot.width == 66, "two occupied groups clamp to the minimum compact width")
+assert(raidRoot.height == 178, "the larger group still drives the row count")
+
+-- Scenario 5: fallback. One malformed subgroup value must restore the old
+-- index-order grid for the entire roster, not just the bad entry.
+raidRosterInfo = { [1] = 1, [2] = 2, [3] = 9, [4] = 1, [5] = 2 }
+groupMemberCount = 5
+eventFrame.scripts.OnEvent(eventFrame, "GROUP_ROSTER_UPDATE")
+
+assert(addon.raidGroupsUnavailable == true, "an out-of-range subgroup must fall back to index order")
+assert(RaidPoint(1)[5] == RaidPoint(2)[5], "the index-order fallback keeps a small roster on row 0")
+assert(RaidPoint(1)[4] ~= RaidPoint(2)[4], "the index-order fallback still spreads members across columns")
+assert(raidRoot.width == 156, "the fallback grid still sizes width from the member count")
+assert(raidRoot.height == 58, "the fallback grid still sizes height from the member count")
+
+local layoutBeforeInvalidArgument = addon.db.raidLayout
+SlashCmdList.SIMPLEDISPEL("raidlayout sideways")
+assert(addon.db.raidLayout == layoutBeforeInvalidArgument, "an invalid raidlayout argument must not change the setting")
+
+inCombat = true
+SlashCmdList.SIMPLEDISPEL("raidlayout down")
+assert(addon.db.raidLayout == "down", "the setting is stored immediately even though the layout is deferred")
+assert(addon.pendingLayoutRefresh == true, "a raid layout change during combat must defer the reposition")
+inCombat = false
+eventFrame.scripts.OnEvent(eventFrame, "PLAYER_REGEN_ENABLED")
+assert(not addon.pendingLayoutRefresh, "deferred raid layout change must apply once combat ends")
 
 -- A drag left running keeps the frame on the cursor, so its unit buttons cover
 -- whatever the player points at and targeting stops working entirely.

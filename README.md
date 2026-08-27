@@ -34,7 +34,7 @@ The addon does **not** provide an automatic dispel decision engine. It does not 
 ## Features
 
 - Compact five-slot solo/party layout.
-- Raid layout with eight columns, up to five rows, and forty fixed unit slots.
+- Raid layout with forty fixed unit slots, arranged by subgroup with a choice of orientation (`/sd raidlayout across` or `/sd raidlayout down`).
 - Direct display of current party member names; raid members are identified by the normal unit-button tooltip.
 - Optional square party buttons: `/sd names hide` collapses the name band, leaving the icon untouched.
 - Raid range feedback for the currently selected friendly-dispel spell, without disabling clicks.
@@ -77,16 +77,16 @@ The raid layout pre-creates the following fixed unit tokens:
 
 - `raid1` through `raid40`
 
-Raid entries are arranged in eight columns. The frame uses only as many rows as the current roster requires, up to five rows for a forty-player raid. Each entry is a compact 28 × 28 pixel square by default:
+Raid entries are laid out by subgroup rather than by raw roster index. Occupied subgroups are placed side by side with no gap left for an empty one in between (for example groups 1, 2, and 5 become three adjacent columns), and each group's members pack to the top of their column or row with no interior holes. `/sd raidlayout across` (the default) gives each subgroup its own column, with members stacked in rows beneath it; `/sd raidlayout down` gives each subgroup its own row, with members spread across columns. The frame's width and height both grow only as far as the occupied columns and rows require, up to eight columns and five rows for a forty-player raid. Each entry is a compact 28 × 28 pixel square by default:
 
 - The filtered aura icon fills the square.
 - Member names are not shown persistently; hover the normal unit button for the client tooltip when identification is needed.
 - Only units that currently exist are shown.
 - The player appears once in the `raidN` roster and is not displayed again as a separate `YOU` slot.
 
-The raid roster remains in Blizzard’s fixed `raidN` order. SimpleDispel does not reorder members by name, class, role, group, or debuff priority. The tooltip is for identification only; it is never parsed or used to make a combat decision.
+SimpleDispel never reassigns which fixed `raidN` unit token a button is bound to; it only moves each button's on-screen position to reflect the member's subgroup. Members are not sorted by name, class, role, or debuff priority. The tooltip is for identification only; it is never parsed or used to make a combat decision. If subgroup data cannot be read for every raid member, the whole layout falls back to the original index-ordered 8-column grid rather than sorting some members and not others; `/sd status` reports this as `raidGroups=unavailable`.
 
-When the raid layout is locked, its title and large background are hidden and the grid is moved upward. Unlocking reveals the small `SD` drag anchor for positioning. During combat, a roster change may temporarily leave the raid frame at its previous height. The frame is resized after combat ends, when protected layout changes are safe.
+When the raid layout is locked, its title and large background are hidden and the grid is moved upward. Unlocking reveals the small `SD` drag anchor for positioning. During combat, a roster change may temporarily leave the raid frame at its previous size. The frame is resized and repositioned after combat ends, when protected layout changes are safe.
 
 ### Range feedback
 
@@ -197,7 +197,7 @@ Both `/sd` and `/simpledispel` are registered as command aliases.
 
 | Command | Description |
 |---|---|
-| `/sd status` | Print addon version, client/build information, active mode, Aura Container support, filter, button/container counts, saved scales, active theme, party name visibility, active spell, and dispel cooldown state. |
+| `/sd status` | Print addon version, client/build information, active mode, Aura Container support, filter, button/container counts, saved scales, active theme, party name visibility, raid layout orientation and subgroup availability, active spell, and dispel cooldown state. |
 | `/sd lock` | Lock both layouts and disable dragging. |
 | `/sd unlock` | Unlock both layouts; drag the Party title bar or the Raid `SD` anchor. |
 | `/sd scale <0.60-2.00>` | Set the scale of the currently active layout. |
@@ -215,6 +215,9 @@ Both `/sd` and `/simpledispel` are registered as command aliases.
 | `/sd names` | Print whether party names are shown or hidden. |
 | `/sd names hide` | Hide the party name band; party buttons become 48 × 48 squares. |
 | `/sd names show` | Show the party name band again (default). |
+| `/sd raidlayout` | Print the current raid layout orientation. |
+| `/sd raidlayout across` | Arrange each subgroup in its own column (default). |
+| `/sd raidlayout down` | Arrange each subgroup in its own row. |
 | `/sd spell auto` | Remove a manual spell override and return to automatic spell selection. |
 | `/sd spell <spellID>` | Set a manual spell-ID override. Use a spell ID from the current client’s spellbook. |
 | `/sd filter mine` | Use the default `HARMFUL|RAID` filter. |
@@ -318,7 +321,7 @@ The repository contains two types of testing material.
 
 The files under [tests](tests) simulate enough of the WoW API to exercise the addon’s structural behavior without launching the game:
 
-- [tests/test.lua](tests/test.lua) checks SavedVariables migration, creation of five party and forty raid buttons, Aura Container creation, unit-button setup, grid placement, visibility drivers, raid height calculation, cooldown/GCD state updates, scale commands, party name band commands, reset behavior, and combat-deferred updates.
+- [tests/test.lua](tests/test.lua) checks SavedVariables migration, creation of five party and forty raid buttons, Aura Container creation, unit-button setup, grid placement, subgroup-sorted raid layout in both orientations, subgroup compression, and the index-order fallback, visibility drivers, raid size calculation, cooldown/GCD state updates, scale commands, party name band commands, reset behavior, and combat-deferred updates.
 - [tests/dispel_spells_test.lua](tests/dispel_spells_test.lua) checks class spell detection, known manual overrides, cross-character override fallback, and classes without a friendly dispel.
 - [tests/secure_button_test.lua](tests/secure_button_test.lua) checks fixed unit attributes, secure click registration, spell attributes, combined range/cooldown visual states, and party/raid visibility drivers.
 - [tests/aura_input_test.lua](tests/aura_input_test.lua) checks Aura Button initialization, icon sizing, duration/cooldown setup, native mouse motion, and click propagation.
@@ -350,10 +353,10 @@ The detailed test matrix and issue-report template are in [BETA_TESTING.md](BETA
 - Only one system-filtered harmful aura is displayed per unit.
 - The addon does not automatically choose the most urgent or most valuable dispel target.
 - The player must click the relevant unit frame; there is no automatic casting.
-- Raid entries are fixed 28 × 28 pixel squares in `raid1`-`raid40` order, arranged as eight columns and at most five rows; they are not sorted by class, role, name, group, or debuff. Member identification is provided by the normal unit-button tooltip rather than a persistent name.
+- Raid entries are fixed 28 × 28 pixel squares bound permanently to `raid1`-`raid40`; only their on-screen position changes. They are arranged by subgroup (`/sd raidlayout across` or `/sd raidlayout down`), not by class, role, name, or debuff, and fall back to the original index-ordered 8-column grid if subgroup data cannot be read for the whole roster. Member identification is provided by the normal unit-button tooltip rather than a persistent name.
 - Range checks use the currently selected friendly-dispel spell and refresh approximately every 0.25 seconds. The `C_Spell.IsSpellInRange` result can be delayed or `nil`; the indicator cannot determine line of sight and never disables clicking.
 - Cooldown feedback reports only whether the selected dispel is on its real ability cooldown. It deliberately does not add a second radial countdown or exact remaining-time number over the aura.
-- The raid frame can temporarily retain its old height when the roster changes during combat; it is resized after combat.
+- The raid frame can temporarily retain its old size and member positions when the roster changes during combat; it is resized and repositioned after combat.
 - Layout movement and protected spell changes are unavailable during combat and are deferred until combat ends.
 - Automatic spell selection currently covers the classes and candidate spells listed above. Other situations may require a manual spell override.
 - Changing the aura filter requires a UI reload.
