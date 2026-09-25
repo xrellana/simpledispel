@@ -229,6 +229,20 @@ function issecretvalue()
     return false
 end
 
+-- The most recent visibility conditional registered for a root frame, which is
+-- the one the secure state driver is currently evaluating.
+local function CurrentVisibility(globalName)
+    local conditional
+    local frame
+    for _, driver in ipairs(stateDrivers) do
+        if driver.frame.globalName == globalName and driver.state == "visibility" then
+            conditional = driver.conditional
+            frame = driver.frame
+        end
+    end
+    return conditional, frame
+end
+
 local addon = {}
 addon.SecureButtons = {
     BUTTON_SIZE = 48,
@@ -336,7 +350,8 @@ assert(eventFrame, "ADDON_LOADED event frame was not created")
 
 eventFrame.scripts.OnEvent(eventFrame, "ADDON_LOADED", "SimpleDispel")
 
-assert(SimpleDispelDB.schemaVersion == 6, "database schema was not upgraded")
+assert(SimpleDispelDB.schemaVersion == 7, "database schema was not upgraded")
+assert(SimpleDispelDB.showWithoutDispel == false, "a database without the option must hide frames without a dispel")
 assert(SimpleDispelDB.raidLayout == "across", "a database without a raid layout must default to across")
 assert(SimpleDispelDB.theme == "dark", "a database without a theme must upgrade to dark")
 assert(addon.Theme:GetActive() == "dark", "dark must be the default theme")
@@ -426,19 +441,13 @@ assert(raid9Point[5] < raid1Point[5], "raid9 must start the second row")
 assert(raid40Point[4] == raid8Point[4], "raid40 must stay in the eighth column")
 assert(raid40Point[5] < raid9Point[5], "raid40 must stay in the fifth row")
 
-local partyVisibility
-local raidVisibility
-local raidRoot
-for _, driver in ipairs(stateDrivers) do
-    if driver.frame.globalName == "SimpleDispelPartyFrame" then
-        partyVisibility = driver.conditional
-    elseif driver.frame.globalName == "SimpleDispelRaidFrame" then
-        raidVisibility = driver.conditional
-        raidRoot = driver.frame
-    end
-end
-assert(partyVisibility == "[group:raid] hide; show", "party visibility driver is wrong")
-assert(raidVisibility == "[group:raid] show; hide", "raid visibility driver is wrong")
+-- No spell is resolved until PLAYER_LOGIN, so the roots start hidden and a
+-- character without a dispel never flashes an empty frame on login.
+local partyVisibility = CurrentVisibility("SimpleDispelPartyFrame")
+local raidVisibility, raidRoot = CurrentVisibility("SimpleDispelRaidFrame")
+assert(partyVisibility == "hide", "party frame must start hidden before a dispel is resolved")
+assert(raidVisibility == "hide", "raid frame must start hidden before a dispel is resolved")
+assert(#stateDrivers == 2, "each root must register exactly one visibility driver while it is built")
 assert(raidRoot.width == 246, "compact raid frame width is wrong")
 assert(addon.frames.party.root.height == 92, "party frame must grow to fit the dedicated label band")
 
@@ -482,6 +491,17 @@ assert(addon.frames.raid.dragHandle.height == 22, "raid drag handle height is wr
 
 eventFrame.scripts.OnEvent(eventFrame, "PLAYER_LOGIN")
 assert(addon.activeSpell and addon.activeSpell.id == 527, "spell was not assigned at login")
+assert(
+    CurrentVisibility("SimpleDispelPartyFrame") == "[group:raid] hide; show",
+    "party visibility driver is wrong"
+)
+assert(
+    CurrentVisibility("SimpleDispelRaidFrame") == "[group:raid] show; hide",
+    "raid visibility driver is wrong"
+)
+local driversAfterLogin = #stateDrivers
+eventFrame.scripts.OnEvent(eventFrame, "PLAYER_ENTERING_WORLD")
+assert(#stateDrivers == driversAfterLogin, "an unchanged dispel must not re-register the visibility drivers")
 assert(createdButtons[45].spell and createdButtons[45].spell.id == 527, "raid spell assignment failed")
 assert(addon.frames.party.content.shown == true, "party buttons must be shown when a dispel is available")
 assert(addon.frames.party.emptyState.shown == false, "party empty state must be hidden when a dispel is available")
@@ -533,21 +553,69 @@ assert(addon.frames.party.content.shown == true, "party buttons must not be hidd
 inCombat = false
 eventFrame.scripts.OnEvent(eventFrame, "PLAYER_REGEN_ENABLED")
 assert(addon.activeSpell == nil, "missing dispel must clear the active spell")
+assert(addon.pendingVisibilityRefresh == false, "the deferred spell refresh must also apply visibility")
+assert(CurrentVisibility("SimpleDispelPartyFrame") == "hide", "party frame must be hidden without a dispel")
+assert(CurrentVisibility("SimpleDispelRaidFrame") == "hide", "raid frame must be hidden without a dispel")
 assert(addon.frames.party.content.shown == false, "party buttons must be hidden without a dispel")
-assert(addon.frames.party.emptyState.shown == true, "party empty state must explain the missing dispel")
 assert(addon.frames.raid.content.shown == false, "raid buttons must be hidden without a dispel")
-assert(addon.frames.raid.emptyState.shown == true, "raid empty state must explain the missing dispel")
-assert(addon.frames.raid.root.height == 70, "raid empty state must use a compact height")
 assert(createdButtons[1].simpleDispelCooldownState == "unknown", "missing dispel must clear cooldown state")
 rangeCalls = {}
 eventFrame.scripts.OnUpdate(eventFrame, 1)
 assert(#rangeCalls == 0, "range refresh must stop without an active dispel")
+
+-- /sd nodispel show brings back the explanatory empty state from 1.5.x.
+SlashCmdList.SIMPLEDISPEL("nodispel show")
+assert(SimpleDispelDB.showWithoutDispel == true, "nodispel show did not persist")
+assert(
+    CurrentVisibility("SimpleDispelPartyFrame") == "[group:raid] hide; show",
+    "nodispel show must restore the party group driver"
+)
+assert(
+    CurrentVisibility("SimpleDispelRaidFrame") == "[group:raid] show; hide",
+    "nodispel show must restore the raid group driver"
+)
+assert(addon.frames.party.emptyState.shown == true, "party empty state must explain the missing dispel")
+assert(addon.frames.raid.emptyState.shown == true, "raid empty state must explain the missing dispel")
+assert(addon.frames.raid.root.height == 70, "raid empty state must use a compact height")
+
+SlashCmdList.SIMPLEDISPEL("nodispel sideways")
+assert(SimpleDispelDB.showWithoutDispel == true, "an unrecognised nodispel argument must change nothing")
+
+-- Re-registering a driver on a root that parents protected buttons is blocked
+-- in combat, so the switch waits for combat to end.
+inCombat = true
+SlashCmdList.SIMPLEDISPEL("nodispel hide")
+assert(SimpleDispelDB.showWithoutDispel == false, "the setting is stored immediately even in combat")
+assert(addon.pendingVisibilityRefresh == true, "a combat visibility change must be deferred")
+assert(
+    CurrentVisibility("SimpleDispelPartyFrame") == "[group:raid] hide; show",
+    "the party driver must not change during combat"
+)
+inCombat = false
+eventFrame.scripts.OnEvent(eventFrame, "PLAYER_REGEN_ENABLED")
+assert(addon.pendingVisibilityRefresh == false, "deferred visibility change was not applied")
+assert(CurrentVisibility("SimpleDispelPartyFrame") == "hide", "deferred nodispel hide did not hide the party frame")
+assert(CurrentVisibility("SimpleDispelRaidFrame") == "hide", "deferred nodispel hide did not hide the raid frame")
 
 resolvedSpell = { id = 527, name = "Purify", icon = 1, known = true, source = "auto" }
 eventFrame.scripts.OnEvent(eventFrame, "PLAYER_SPECIALIZATION_CHANGED")
 assert(addon.activeSpell and addon.activeSpell.id == 527, "spec change must restore the detected dispel")
 assert(addon.frames.party.content.shown == true, "party buttons must return after dispel detection")
 assert(addon.frames.party.emptyState.shown == false, "party empty state must clear after dispel detection")
+assert(
+    CurrentVisibility("SimpleDispelPartyFrame") == "[group:raid] hide; show",
+    "a newly detected dispel must bring the party frame back"
+)
+assert(
+    CurrentVisibility("SimpleDispelRaidFrame") == "[group:raid] show; hide",
+    "a newly detected dispel must bring the raid frame back"
+)
+
+-- With a dispel available the option changes nothing that is on screen.
+local driversWithDispel = #stateDrivers
+SlashCmdList.SIMPLEDISPEL("nodispel show")
+SlashCmdList.SIMPLEDISPEL("nodispel hide")
+assert(#stateDrivers == driversWithDispel, "nodispel must not touch frames while a dispel is available")
 
 SlashCmdList.SIMPLEDISPEL("scale raid 0.75")
 assert(SimpleDispelDB.layouts.raid.scale == 0.75, "explicit raid scale command failed")

@@ -9,6 +9,7 @@ SimpleDispel shows up to one Blizzard-filtered harmful aura per supported unit. 
 - Five-slot solo/party frame: `player` and `party1`–`party4`.
 - Raid frame: up to 40 fixed units in an 8-column × 5-row grid.
 - Automatically detects a known friendly-dispel spell and refreshes after specialization, talent, or spell changes.
+- Hides itself completely on characters without a friendly dispel; `/sd nodispel show` keeps the frames visible instead.
 - Shows the native aura icon, stack count, tooltip, duration/cooldown display, and party member name where the client provides them.
 - Marks out-of-range units with a red border and `×`; an unknown range stays neutral. Range is visual guidance only and never disables clicks.
 - Keeps debuffs visible while the dispel is on its real cooldown and adds a `CD` marker; the global cooldown alone does not trigger it.
@@ -47,6 +48,9 @@ Both `/sd` and `/simpledispel` are command aliases. Running `/sd` with no recogn
 | `/sd names` | Prints whether the party name band is shown or hidden. |
 | `/sd names hide` | Hides the party name band; party buttons become 48 x 48 squares. Names then come from the unit tooltip. |
 | `/sd names show` | Shows the party name band again (default). |
+| `/sd nodispel` | Prints whether the frames are hidden or shown while the character has no dispel. |
+| `/sd nodispel hide` | Hides every SimpleDispel frame while no dispel is available (default). |
+| `/sd nodispel show` | Keeps the frames visible without a dispel, with an explanation in place of the unit buttons. |
 | `/sd spell auto` | Clears a manual override and returns to automatic spell selection. |
 | `/sd spell <spellID>` | Uses a spell-ID override. The character must know the spell; the addon does not verify that it is a friendly dispel. |
 | `/sd filter mine` | Uses `HARMFUL\|RAID` (default). |

@@ -45,7 +45,7 @@ The addon does **not** provide an automatic dispel decision engine. It does not 
 - Secure visibility drivers for units that join or leave the group.
 - Automatic selection of a known friendly-dispel spell from the player’s spellbook.
 - Manual spell-ID override when automatic spell detection is not sufficient.
-- A localized empty state instead of inactive unit buttons when the current character has no known friendly dispel.
+- Stays out of the way on characters without a known friendly dispel: every SimpleDispel frame is hidden until one is detected. `/sd nodispel show` keeps the frames on screen with a localized explanation instead.
 - Separate saved position and scale for party and raid layouts.
 - Movable, lockable, resettable, and scalable layouts.
 - No target switching.
@@ -197,7 +197,7 @@ Both `/sd` and `/simpledispel` are registered as command aliases.
 
 | Command | Description |
 |---|---|
-| `/sd status` | Print addon version, client/build information, active mode, Aura Container support, filter, button/container counts, saved scales, active theme, party name visibility, raid layout orientation and subgroup availability, active spell, and dispel cooldown state. |
+| `/sd status` | Print addon version, client/build information, active mode, Aura Container support, filter, button/container counts, saved scales, active theme, party name visibility, raid layout orientation and subgroup availability, no-dispel visibility, active spell, and dispel cooldown state. |
 | `/sd lock` | Lock both layouts and disable dragging. |
 | `/sd unlock` | Unlock both layouts; drag the Party title bar or the Raid `SD` anchor. |
 | `/sd scale <0.60-2.00>` | Set the scale of the currently active layout. |
@@ -218,6 +218,9 @@ Both `/sd` and `/simpledispel` are registered as command aliases.
 | `/sd raidlayout` | Print the current raid layout orientation. |
 | `/sd raidlayout across` | Arrange each subgroup in its own column (default). |
 | `/sd raidlayout down` | Arrange each subgroup in its own row. |
+| `/sd nodispel` | Print whether the frames are hidden or shown while the character has no dispel. |
+| `/sd nodispel hide` | Hide every SimpleDispel frame while no dispel is available (default). |
+| `/sd nodispel show` | Keep the frames visible without a dispel, with an explanation in place of the unit buttons. |
 | `/sd spell auto` | Remove a manual spell override and return to automatic spell selection. |
 | `/sd spell <spellID>` | Set a manual spell-ID override. Use a spell ID from the current client’s spellbook. |
 | `/sd filter mine` | Use the default `HARMFUL|RAID` filter. |
@@ -242,7 +245,7 @@ On login and after spell, specialization, or talent changes, SimpleDispel checks
 | Priest | Purify (`527`) → Purify Disease (`213634`) |
 | Shaman | Purify Spirit (`77130`) → Cleanse Spirit (`51886`) |
 
-The addon verifies whether a candidate is actually known instead of assuming that every character of a class has every spell. If no candidate is found, the inactive unit buttons are replaced by a compact explanation for the current specialization; `/sd status` also reports `spell=none`. The normal frames return automatically after a spell, specialization, or talent change makes a dispel available.
+The addon verifies whether a candidate is actually known instead of assuming that every character of a class has every spell. If no candidate is found (for example on a Warrior, Rogue, Hunter, Death Knight, Demon Hunter, or Warlock), every SimpleDispel frame is hidden, including the drag handles, and `/sd status` reports `spell=none`. The normal frames return automatically after a spell, specialization, or talent change makes a dispel available. Use `/sd nodispel show` to keep the frames on screen instead, with a compact localized explanation in place of the inactive unit buttons, for example to position them on a character that has no dispel. The setting is saved per account in `SimpleDispelDB.showWithoutDispel`. Changing it re-registers the frames' visibility drivers, so a change made during combat is applied when combat ends.
 
 To use a manual override:
 
