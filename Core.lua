@@ -47,6 +47,7 @@ addon.pendingSpellRefresh = false
 addon.pendingLayoutRefresh = false
 addon.pendingRaidSizeRefresh = false
 addon.pendingNameBandRefresh = false
+addon.pendingVisibilityRefresh = false
 addon.dispelCooldownActive = nil
 
 local PositionRaidButtons
@@ -106,7 +107,7 @@ local function InitializeDatabase()
         SimpleDispelDB = {}
     end
 
-    SimpleDispelDB.schemaVersion = 6
+    SimpleDispelDB.schemaVersion = 7
     SimpleDispelDB.filterMode = SimpleDispelDB.filterMode or "mine"
     -- Databases written before subgroup-sorted layout existed carry no field,
     -- so they default to "across", which preserves the pre-1.4 wide footprint
@@ -127,6 +128,12 @@ local function InitializeDatabase()
     -- visible on upgrade until the player hides them with /sd names hide.
     if type(SimpleDispelDB.hidePartyNames) ~= "boolean" then
         SimpleDispelDB.hidePartyNames = false
+    end
+    -- A character without a friendly dispel hides every SimpleDispel frame by
+    -- default. Databases written before this option carry no field and take
+    -- the new default too; /sd nodispel show restores the explanatory panel.
+    if type(SimpleDispelDB.showWithoutDispel) ~= "boolean" then
+        SimpleDispelDB.showWithoutDispel = false
     end
     if type(SimpleDispelDB.layouts) ~= "table" then
         SimpleDispelDB.layouts = {}
@@ -284,6 +291,47 @@ local function ApplyTheme()
     end
 end
 
+local function FramesWanted(hasDispel)
+    return hasDispel or (addon.db and addon.db.showWithoutDispel) or false
+end
+
+-- Each root keeps its own group-type driver while it is wanted; hiding the
+-- whole addon swaps that driver for an unconditional "hide" rather than
+-- calling Hide(), which the group-type driver would undo on its next update.
+-- The roots parent protected unit buttons, so callers must be out of combat
+-- (or in the initial load, as CreateRoot is).
+local function SetRootVisibility(frameInfo, wanted)
+    local driver = wanted and frameInfo.visibilityDriver or "hide"
+    if frameInfo.appliedVisibility == driver then
+        return
+    end
+    frameInfo.appliedVisibility = driver
+
+    if RegisterStateDriver then
+        RegisterStateDriver(frameInfo.root, "visibility", driver)
+    elseif not wanted then
+        frameInfo.root:SetShown(false)
+    elseif frameInfo.layoutKey == "raid" then
+        frameInfo.root:SetShown(IsInRaid and IsInRaid())
+    else
+        frameInfo.root:SetShown(not (IsInRaid and IsInRaid()))
+    end
+end
+
+local function ApplyRootVisibility(hasDispel)
+    if InCombatLockdown() then
+        addon.pendingVisibilityRefresh = true
+        return false
+    end
+
+    local wanted = FramesWanted(hasDispel)
+    for _, frameInfo in pairs(addon.frames) do
+        SetRootVisibility(frameInfo, wanted)
+    end
+    addon.pendingVisibilityRefresh = false
+    return true
+end
+
 local function CreateRoot(layoutKey, globalName, titleBase, width, height, visibilityDriver, compactHandle)
     local root = CreateFrame("Frame", globalName, UIParent)
     root:SetSize(width, height)
@@ -352,6 +400,8 @@ local function CreateRoot(layoutKey, globalName, titleBase, width, height, visib
     emptyHint:SetText(NO_DISPEL_HINT)
 
     local frameInfo = {
+        layoutKey = layoutKey,
+        visibilityDriver = visibilityDriver,
         root = root,
         background = background,
         dragHandle = dragHandle,
@@ -366,13 +416,9 @@ local function CreateRoot(layoutKey, globalName, titleBase, width, height, visib
     addon.frames[layoutKey] = frameInfo
     ApplyFrameTheme(frameInfo)
 
-    if RegisterStateDriver then
-        RegisterStateDriver(root, "visibility", visibilityDriver)
-    elseif layoutKey == "raid" then
-        root:SetShown(IsInRaid and IsInRaid())
-    else
-        root:SetShown(not (IsInRaid and IsInRaid()))
-    end
+    -- No spell has been resolved yet while the UI is built, so a character
+    -- without a dispel never flashes an empty frame before PLAYER_LOGIN.
+    SetRootVisibility(frameInfo, FramesWanted(addon.activeSpell ~= nil))
 
     return frameInfo
 end
@@ -758,6 +804,7 @@ local function UpdateDispelAvailability(spell)
         raidFrame.background:SetShown(not addon.db.locked or not hasDispel)
     end
     RefreshRaidFrameSize()
+    ApplyRootVisibility(hasDispel)
 end
 
 local function IsRangeUnitActive(unit, layoutKey)
@@ -906,9 +953,10 @@ local function PrintStatus()
         PartyNamesShown() and "shown" or "hidden"
     ))
     Print(string.format(
-        "raidLayout=%s raidGroups=%s",
+        "raidLayout=%s raidGroups=%s noDispel=%s",
         addon.db.raidLayout,
-        addon.raidGroupsUnavailable and "unavailable" or "sorted"
+        addon.raidGroupsUnavailable and "unavailable" or "sorted",
+        addon.db.showWithoutDispel and "show" or "hide"
     ))
 
     if spell then
@@ -942,6 +990,7 @@ local function PrintHelp()
     Print("/sd theme <" .. THEME_HELP .. ">")
     Print("/sd names <show|hide>")
     Print("/sd raidlayout <across|down>")
+    Print("/sd nodispel <hide|show>")
     Print("/sd lock | /sd unlock")
     Print("/sd scale <0.60-2.00> [party|raid]")
     Print("/sd reset [party|raid|all]")
@@ -1046,6 +1095,33 @@ local function HandleRaidLayoutCommand(argument)
     end
 end
 
+local function HandleNoDispelCommand(argument)
+    if argument == "" then
+        Print("frames without a dispel are " .. (addon.db.showWithoutDispel and "shown" or "hidden")
+            .. "; use /sd nodispel <hide|show>")
+        return
+    end
+
+    local shown
+    if argument == "show" or argument == "on" then
+        shown = true
+    elseif argument == "hide" or argument == "off" then
+        shown = false
+    else
+        Print("usage: /sd nodispel <hide|show>")
+        return
+    end
+
+    addon.db.showWithoutDispel = shown
+    ApplyRootVisibility(addon.activeSpell ~= nil)
+    Print(shown
+        and "frames stay visible without a dispel and explain why they are empty"
+        or "all frames are hidden while this character has no dispel")
+    if InCombatLockdown() then
+        Print("visibility will update after combat")
+    end
+end
+
 local function HandleLockCommand(locked)
     addon.db.locked = locked
     ApplyAllFrameSettings()
@@ -1128,6 +1204,8 @@ local function HandleSlashCommand(message)
         HandleNamesCommand(argument)
     elseif command == "raidlayout" then
         HandleRaidLayoutCommand(argument)
+    elseif command == "nodispel" then
+        HandleNoDispelCommand(argument)
     elseif command == "lock" then
         HandleLockCommand(true)
     elseif command == "unlock" then
@@ -1197,8 +1275,11 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         RefreshRaidFrameSize()
         if addon.activeSpell then
             Print("v" .. GetAddonVersion() .. " loaded; party + raid ready; use /sd status")
-        else
+        elseif addon.db.showWithoutDispel then
             Print("v" .. GetAddonVersion() .. " loaded; no dispel spell available; use /sd status")
+        else
+            Print("v" .. GetAddonVersion() .. " loaded; no dispel spell available, frames hidden;"
+                .. " use /sd nodispel show to keep them visible")
         end
     elseif event == "PLAYER_ENTERING_WORLD" then
         -- Retry after login because the spellbook can finish settling while
@@ -1232,6 +1313,9 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         end
         if addon.pendingNameBandRefresh then
             ApplyPartyNameBand()
+        end
+        if addon.pendingVisibilityRefresh then
+            ApplyRootVisibility(addon.activeSpell ~= nil)
         end
     elseif event == "SPELL_UPDATE_COOLDOWN" then
         addon:RefreshCooldownState(true)

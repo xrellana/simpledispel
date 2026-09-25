@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.6.0 — 2026-09-25
+
+- A character with no known friendly dispel now hides every SimpleDispel frame, including the drag handles, instead of showing the "no dispel spell available" panel. The frames return automatically, exactly as before, once a spell, specialization, or talent change makes a dispel available. The login message says the frames are hidden and how to bring them back.
+- Add `/sd nodispel show` to keep the frames visible without a dispel, with the localized explanation from 1.5.x in place of the unit buttons, and `/sd nodispel hide` to return to the new default. `/sd nodispel` on its own prints the current setting, and `/sd status` reports it as `noDispel=`.
+- The setting is saved per account in the new `SimpleDispelDB.showWithoutDispel` field. Databases written before this option take the new hidden default. SavedVariables schema raised from 6 to 7.
+- Showing or hiding the frames re-registers their visibility drivers, and the frames parent protected action buttons, so a change requested during combat is applied when combat ends. On login the frames also stay hidden until a dispel is detected, so a character without one never briefly shows an empty frame.
+
 ## 1.5.0 — 2026-08-27
 
 - The raid frame now lays its 40 buttons out by subgroup instead of by raw raid roster index. Occupied subgroups are compressed side by side with no gap left for an empty one in between (for example groups 1, 2 and 5 become three adjacent columns), and a group's members pack to the top of their column or row with no interior holes.
