@@ -9,7 +9,7 @@ It provides compact party and raid frames that show a Blizzard-filtered harmful 
 
 ## Current status
 
-- **Addon version:** `1.0.0`
+- **Addon version:** `1.7.0`
 - **Target client:** World of Warcraft Retail 12.1+ (`Interface: 120100`)
 - **Supported layouts:** solo/party and raid
 - **Supported units:** `player`, `party1`-`party4`, and `raid1`-`raid40`
@@ -48,6 +48,7 @@ The addon does **not** provide an automatic dispel decision engine. It does not 
 - Stays out of the way on characters without a known friendly dispel: every SimpleDispel frame is hidden until one is detected. `/sd nodispel show` keeps the frames on screen with a localized explanation instead.
 - Separate saved position and scale for party and raid layouts.
 - Movable, lockable, resettable, and scalable layouts.
+- Native Retail Settings page under `Options > AddOns > SimpleDispel`, with English, Simplified Chinese, and Traditional Chinese labels.
 - No target switching.
 - No automatic clicking, input simulation, external process, or combat-log-based automation.
 
@@ -144,6 +145,8 @@ Use `/sd theme` to print the active theme; see [Slash commands](#slash-commands)
 
 The addon directory must not contain an extra nested directory such as `AddOns/SimpleDispel/SimpleDispel-main/SimpleDispel.toc`.
 
+Keep `Options.lua` with the addon files. It provides the native Settings page and is loaded by `SimpleDispel.toc`.
+
 ### Using Git
 
 From a shell, clone directly into the WoW AddOns directory:
@@ -193,12 +196,29 @@ To make only one layout smaller, use `/sd scale party 0.80` or `/sd scale raid 0
 
 Layout movement, scale changes, spell-attribute changes, and Party/Raid frame resizing are subject to combat lockdown. If a change is requested during combat, SimpleDispel defers the protected update until combat ends.
 
+## Settings
+
+SimpleDispel registers a native Retail Settings page at `Options > AddOns > SimpleDispel`. Open it from the game menu, or use `/sd` or `/sd options`. The page uses the same saved settings and shared handlers as the slash commands; existing commands remain available, and `/sd help` prints the command list.
+
+The page is divided into five sections:
+
+- **General:** lock both frames, choose the dark or light theme, and show the explanatory frames when no friendly dispel is known.
+- **Party:** show or hide member names, set the Party scale from 60% to 200%, and reset the Party position and scale.
+- **Raid:** set the Raid scale from 60% to 200%, choose subgroup arrangement (`Groups side by side` or `Groups stacked vertically`), and reset the Raid position and scale.
+- **Dispel:** choose automatic detection or a known spell from the spell dropdown, enter a custom spell ID through the validation popup, choose the aura filter, and reload the UI when the filter requires it.
+- **Tools:** reset both layouts or print diagnostics to chat.
+
+Scale values are saved separately for Party and Raid, with 100% as the default. Layout and spell changes requested during combat use the same deferred-update behavior as the commands. Changing the aura filter still requires the page's **Reload UI** button (or `/reload`). The four-suite Lua 5.4 mock run covers the listed Settings paths; live layout, input, localization, and taint behavior still require client verification.
+
 ## Slash commands
 
 Both `/sd` and `/simpledispel` are registered as command aliases.
 
 | Command | Description |
 |---|---|
+| `/sd` | Open the native SimpleDispel Settings page. |
+| `/sd options` | Open the native SimpleDispel Settings page. |
+| `/sd help` | Print the slash-command help. |
 | `/sd status` | Print addon version, client/build information, active mode, Aura Container support, filter, button/container counts, saved scales, active theme, party name visibility, raid layout orientation and subgroup availability, no-dispel visibility, active spell, and dispel cooldown state. |
 | `/sd lock` | Lock both layouts and disable dragging. |
 | `/sd unlock` | Unlock both layouts; hover just outside either layout's top-left edge on the left for its drag handle. |
@@ -229,9 +249,7 @@ Both `/sd` and `/simpledispel` are registered as command aliases.
 | `/sd filter group` | Use `HARMFUL|RAID_PLAYER_DISPELLABLE`. |
 | `/sd filter all` | Use `HARMFUL|DISPELLABLE`. |
 
-The `filter` command rebuilds the aura configuration only after a reload. Run `/reload` after changing the filter.
-
-Running `/sd` without a recognized subcommand prints the command help.
+The `filter` command rebuilds the aura configuration only after a reload. Run `/reload` after changing the filter. The Settings page has a matching **Reload UI** button.
 
 ## Friendly-dispel spell selection
 
@@ -331,6 +349,8 @@ The files under [tests](tests) simulate enough of the WoW API to exercise the ad
 - [tests/secure_button_test.lua](tests/secure_button_test.lua) checks fixed unit attributes, secure click registration, spell attributes, combined range/cooldown visual states, and party/raid visibility drivers.
 - [tests/aura_input_test.lua](tests/aura_input_test.lua) checks Aura Button initialization, icon sizing, duration/cooldown setup, native mouse motion, and click propagation.
 
+`tests/settings_mock.lua` supplies the minimal Retail Settings API mock used by `tests/test.lua`. The passing four-suite run covers one-time category registration, persisted getters and command synchronization, reset replacement, setter-driven frame updates, 60%–200% bounds, combat-deferred layout changes, filter/reload separation, automatic and invalid manual spell paths, and custom-ID popup validation. This mock coverage does not replace live-client layout, input, localization, or taint testing.
+
 These tests are mock-runtime tests. They are useful for catching regressions in layout and setup logic, but they cannot prove that the live game will accept a protected action, avoid taint, or behave correctly in every combat scenario.
 
 The test files are intended to be run from the repository root with a compatible Lua interpreter.
@@ -365,6 +385,7 @@ The detailed test matrix and issue-report template are in [BETA_TESTING.md](BETA
 - Layout movement and protected spell changes are unavailable during combat and are deferred until combat ends.
 - Automatic spell selection currently covers the classes and candidate spells listed above. Other situations may require a manual spell override.
 - Changing the aura filter requires a UI reload.
+- The native Settings page is implemented and its listed control paths pass the mock suite; its layout, input, localization, combat-deferred behavior, and taint still require live-client verification.
 - The aura icon’s click propagation and tooltip interaction still require live-client regression testing.
 - Performance and taint behavior with forty Aura Containers in a real raid require further validation.
 - Retail 12.1+ is the target; Classic-era clients are not supported.
@@ -414,6 +435,7 @@ SimpleDispel/
 ├── DispelSpells.lua       # Candidate spells and spellbook-based resolution
 ├── SecureButtons.lua      # Secure unit buttons and spell attributes
 ├── AuraDisplay.lua        # Aura Container creation and display initialization
+├── Options.lua            # Native Retail Settings page and localized labels
 ├── tests/                 # Offline mock-runtime tests
 ├── BETA_TESTING.md        # Party and raid live-testing checklist
 ├── STAGE1_TESTING.md      # Initial 12.1 API validation procedure
@@ -430,6 +452,7 @@ DispelSpells.lua
 SecureButtons.lua
 AuraDisplay.lua
 Core.lua
+Options.lua
 ~~~
 
 ## Development guidelines

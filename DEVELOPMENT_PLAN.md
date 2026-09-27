@@ -1,6 +1,8 @@
 # SimpleDispel 当前开发状态与后续计划
 
-2026-09-27 工作区更新：Party 和 Raid 均改为左上角左侧外缘的 16 × 28 悬停拖动把手，去掉两种布局原有标题的 22 像素留白和大背景；锁定、解锁不再移动布局，锁定或进入战斗会禁用并停止拖动。Party 按钮、图标和名字条尺寸不变，外框高度为显示名字 70、隐藏名字 56。悬停、拖动、隐藏、锁定和战斗切换的离线测试通过，四个 Lua 测试套件均通过。实际客户端的鼠标命中、屏幕边缘约束和战斗行为仍待按 `BETA_TESTING.md` 验证。Party/Raid 独立缩放沿用 `/sd scale <party|raid> <0.60-2.00>`，默认均为 1.00。本节以下保留此前审计记录，其中旧版 Party/Raid 标题栏行为以此更新为准。
+2026-09-27 工作区更新：Party 和 Raid 均改为左上角左侧外缘的 16 × 28 悬停拖动把手，去掉两种布局原有标题的 22 像素留白和大背景；锁定、解锁不再移动布局，锁定或进入战斗会禁用并停止拖动。Party 按钮、图标和名字条尺寸不变，外框高度为显示名字 70、隐藏名字 56。四个 Lua 5.4 测试套件已通过，包含新增 Options 页面与 Core 的集成 mock 测试。实际客户端的鼠标命中、屏幕边缘约束和战斗行为仍待按 `BETA_TESTING.md` 验证。Party/Raid 独立缩放沿用 `/sd scale <party|raid> <0.60-2.00>`，默认均为 1.00。本节以下保留此前审计记录，其中旧版 Party/Raid 标题栏行为以此更新为准。
+
+当前工作区新增 `Options.lua` 原生 Retail Settings 页面：位于 `Options > AddOns > SimpleDispel`，可由 `/sd` 或 `/sd options` 打开，`/sd help` 继续输出命令帮助。页面覆盖现有锁定、主题、无驱散显示、Party/Raid 缩放与布局、技能、过滤器、重置和诊断功能，并提供英文、zhCN、zhTW 标签；过滤器仍须通过 Reload UI 生效。设置注册、保存值与命令同步、重置后的读取、控件更新框体、缩放范围、战斗延迟、过滤器重载分离和技能 ID 弹窗校验已获 mock 覆盖，真实客户端行为仍待验证。
 
 ## 1. 审计结论
 
@@ -50,21 +52,23 @@ SimpleDispel 的“一键驱散”是：插件为固定 unit token 创建成员�
 |---|---|
 | `SimpleDispel.toc` | Retail 12.1 manifest、版本、SavedVariables 和加载顺序。 |
 | `Core.lua` | 初始化、SavedVariables 迁移、Party/Raid 根框架、布局、事件、斜杠命令和模块协调。 |
+| `Options.lua` | Retail Settings 页面、代理设置、重置/重载/诊断按钮、技能 ID 弹窗和 English/zhCN/zhTW 标签。 |
 | `DispelSpells.lua` | 各职业候选技能、spellbook/已知技能检测和自动解析。 |
 | `SecureButtons.lua` | `SecureActionButtonTemplate`、固定 unit、点击注册、spell attribute 和安全可见性。 |
 | `AuraDisplay.lua` | Aura Container、过滤器、单个 aura slot、图标/cooldown/count/duration 初始化和点击传播。 |
 | `tests/test.lua` | Core 的 mock runtime 测试。 |
 | `tests/secure_button_test.lua` | 安全按钮的 mock API 测试。 |
 | `tests/aura_input_test.lua` | Aura Button 初始化和鼠标传播的 mock API 测试。 |
+| `tests/settings_mock.lua` | Options.lua 使用的最小 Retail Settings API mock。 |
 | `.github/workflows/release.yml` | 校验 TOC 版本、打包 Lua/TOC 并创建 GitHub release。 |
 
-当前不存在计划早期列出的 `Layout.lua`、`Options.lua`、`Locale.lua`；对应布局、SavedVariables/命令功能暂时集中在 `Core.lua`。未来可以拆分，但这不是当前 `1.0.0` 的已交付文件。
+当前不存在计划早期列出的 `Layout.lua`、`Locale.lua`；布局、SavedVariables/命令功能仍集中在 `Core.lua`，Retail Settings 页面由 `Options.lua` 提供。Options 内含三种客户端语言的标签，但尚未拆出独立 locale 模块。
 
 ## 5. 已实现能力与证据
 
 | 能力 | 状态 | 代码证据 | review 说明 |
 |---|---|---|---|
-| Manifest、版本和 SavedVariables | 代码已实现 | `SimpleDispel.toc:1-11` | 当前版本为 `1.0.0`。加载是否无 Lua 错误仍需游戏内确认。 |
+| Manifest、版本和 SavedVariables | 代码已实现 | `SimpleDispel.toc:1-14` | 当前版本为 `1.7.0`。加载是否无 Lua 错误仍需游戏内确认。 |
 | Party 五个固定 slot | 代码已实现；mock 已覆盖 | `Core.lua:305-337`；`tests/test.lua:223-231` | 固定为 `player`、`party1`-`party4`；按钮保持 48 × 62（隐藏名字时 48 × 48），外框高度为 70/56。 |
 | Raid 四十个固定 slot | 代码已实现；mock 已覆盖 | `Core.lua:370-408`；`tests/test.lua:223-231` | 固定为 `raid1`-`raid40`，不动态重排。 |
 | Party/Raid 安全显示切换 | 代码已实现；mock 已覆盖 | `Core.lua:230-236`、`SecureButtons.lua:53-58`；`tests/test.lua:249-261` | 具体客户端 protected frame 行为仍待验证。 |
@@ -82,6 +86,7 @@ SimpleDispel 的“一键驱散”是：插件为固定 unit token 创建成员�
 | 手动 spell ID override | 代码已实现 | `Core.lua:491-512`；`DispelSpells.lua:80-87` | 已知风险：只确认客户端能取得 spell 信息，不强制确认角色已学会该 spell。 |
 | SavedVariables、旧版迁移和 Party/Raid 独立缩放 | 代码已实现；mock 已覆盖 | `Core.lua:78-107,149-183`；`tests/test.lua:219-222,267-301` | schema 当前为 3。 |
 | 锁定、解锁、拖动、重置和战斗延迟 | 代码已实现；部分 mock 已覆盖 | `Core.lua`；`tests/test.lua` | Party/Raid 都没有顶部标题留白；两者使用左上角左侧外缘的 16 × 28 悬停把手。正常驱散布局隐藏大背景，锁定或进入战斗会禁用并停止拖动，布局尺寸和位置偏移不因锁定改变。战斗内实际 protected 行为仍需验证。 |
+| Retail Settings 页面 | 代码已实现；集成 mock 已通过 | `Options.lua`；`Core.lua`；`tests/test.lua`；`tests/settings_mock.lua` | 位于 `Options > AddOns > SimpleDispel`，`/sd` 和 `/sd options` 可打开；覆盖现有配置、布局重置、过滤器 Reload UI、技能下拉/自定义 ID 验证和诊断输出。与斜杠命令共用处理器和战斗延迟；真实客户端行为仍待验证。 |
 | 诊断命令 `/sd status` | 代码已实现 | `Core.lua:438-480` | 可输出版本、Build、模式、容器数、过滤器和技能信息。 |
 | 过滤器、缩放、重置和 spell 命令 | 代码已实现；部分 mock 已覆盖 | `Core.lua:482-610`；`tests/test.lua:267-288` | 修改 filter 后需要 `/reload` 重建容器。 |
 | Release 打包工作流 | 代码已实现 | `.github/workflows/release.yml:1-77` | 只打包 Lua/TOC 并发布；当前没有 test job。 |
@@ -93,10 +98,11 @@ SimpleDispel 的“一键驱散”是：插件为固定 unit token 创建成员�
 - `tests/test.lua`：SavedVariables 迁移、45 个按钮和容器的结构、unit-button 设置、网格位置、visibility driver、Party/Raid 高度、缩放/重置、悬停把手、拖动清理和战斗延迟。
 - `tests/secure_button_test.lua`：固定 unit、左右键注册、`useOnKeyDown`、spell attribute、范围/冷却合成视觉状态、Party/Raid visibility driver。
 - `tests/aura_input_test.lua`：Aura Button 尺寸、图标、cooldown、层数、持续时间、native mouse motion 和点击传播初始化。
+- `tests/settings_mock.lua`：为 `tests/test.lua` 中的 Options/Core 集成测试提供 Settings、滑块、下拉框、按钮、弹窗和 Reload UI 的最小 mock；不能验证真实控件的排版、鼠标输入和三种语言的实际显示。
 
 这些测试使用自建 API mock，不能证明真实客户端会接受 protected action，不能证明目标不变、点击图标一定成功，也不能发现真实 taint、`ADDON_ACTION_FORBIDDEN`、secret-value/forbidden-frame、战斗 roster 行为或 40 个容器的性能问题。`tests/test.lua` 还替换了 `SecureButtons`、`AuraDisplay` 和 `Spells`，因此不等于端到端集成测试。
 
-本次审计环境未发现 Lua/LuaJIT 解释器，因此未执行这些测试；离线测试需要外部 Lua/LuaJIT 解释器，仓库不提供解释器。项目源码不依赖 Ace3 或其他第三方 addon 库。GitHub Actions 当前只有 release workflow，没有自动测试 job。
+2026-09-27 已在 Lua 5.4 环境执行四个测试套件并全部通过。仓库不提供解释器，项目源码不依赖 Ace3 或其他第三方 addon 库。当前 release workflow 会在打包前运行这四个测试套件；此前审计中未执行测试的环境结论不再代表当前工作区。
 
 ## 7. 正式服待验证项（P0/P1 验收门禁）
 
@@ -125,13 +131,14 @@ SimpleDispel 的“一键驱散”是：插件为固定 unit token 创建成员�
 - 简体中文、繁体中文和英文的 locale 系统；当前没有 `Locale.lua`，命令文本主要直接写在 `Core.lua`。
 - 可配置方块大小、间距、每行数量、横向/纵向增长方向。
 - 不依赖真实 aura 的布局测试模式。
-- 完整设置 GUI；MVP 阶段暂不做，斜杠命令足够完成当前基础设置。
-- 自动构建后的 mock 测试 job；当前 release workflow 不执行测试。
+- Native Retail Settings 页面已覆盖当前 MVP 设置并通过集成 mock；仍需真实客户端验收，超出当前页面范围的自定义 GUI 暂不做。
+- 独立的 PR 测试 workflow；当前四个 mock 套件已在 release workflow 的打包前执行。
 
 ### 已知风险
 
 - `/sd spell <spellID>` 不强制验证角色已学会该 spell；误设未知或不可用技能可能导致按钮不可施法。
 - 每个单位只显示一个系统过滤后的 `dispel` slot；过滤器具体结果由客户端决定，插件不解析 aura。
+- Native Retail Settings 页面和三种语言标签尚未完成真实客户端验证；离线测试不能验证实际排版、输入或 taint 行为。
 - Party 名字显示设置或 Raid roster 在战斗中变化时，外框尺寸可能暂时保持旧值，计划在脱战后更新。
 - Raid 使用固定 `raid1`-`raid40` 顺序和 8 列、最多 5 行的 28 × 28 方格；普通 unit-button tooltip 只用于识别，不保证按姓名、职业或职责排序。
 - 范围视觉状态约每 0.25 秒刷新，可能因客户端延迟暂时滞后；`nil` 表示未知，提示不能判断 LoS；即使范围外也保留点击能力。
@@ -146,7 +153,7 @@ SimpleDispel 的“一键驱散”是：插件为固定 unit token 创建成员�
 
 ### P0：正式服安全点击门禁
 
-**工作：** 使用 Retail 12.1 实际客户端完成单人、五人和至少一个团队规模的低风险测试；重点验证 28 × 28 Raid 网格、空白方块、Aura 图标、正确 unit、当前目标、范围视觉状态、战斗状态和错误日志。
+**工作：** 使用 Retail 12.1 实际客户端完成单人、五人和至少一个团队规模的低风险测试；重点验证 Party/Raid 布局、Native Settings 页面、28 × 28 Raid 网格、空白方块、Aura 图标、正确 unit、当前目标、范围视觉状态、战斗状态和错误日志。
 
 **验收标准：**
 
@@ -172,14 +179,14 @@ SimpleDispel 的“一键驱散”是：插件为固定 unit token 创建成员�
 
 ### P2：易用性、本地化与工程质量
 
-**工作：** 在 P0/P1 稳定后评估尺寸、间距、行数、增长方向、测试模式和 locale；28 × 28、8 列最多 5 行作为当前默认布局保持稳定；为 mock 测试加入可执行的 CI job，并保持 release workflow 的版本校验。
+**工作：** 在 P0/P1 稳定后继续验证 Native Settings 页面、English/zhCN/zhTW 标签、尺寸、间距、行数、增长方向和测试模式；28 × 28、8 列最多 5 行作为当前默认布局保持稳定；为 mock 测试加入可执行的 CI job，并保持 release workflow 的版本校验。
 
 **验收标准：**
 
 - 新设置有 SavedVariables 迁移策略、命令/文档和 mock 覆盖；
-- 中英文及繁中客户端不会破坏显示或安全施法属性；
+- Native Settings 页面在英文、简体中文及繁体中文客户端均不会破坏显示或安全施法属性；
 - CI 能在干净环境执行全部 mock 测试；
-- 复杂 GUI 只有在明确扩大范围后才进入里程碑。
+- 若未来需要超出 Retail Settings 的自定义 GUI，必须先明确扩大范围。
 
 ## 10. 稳定版门槛
 

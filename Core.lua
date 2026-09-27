@@ -991,6 +991,7 @@ local function PrintStatus()
 end
 
 local function PrintHelp()
+    Print("/sd options (open settings)")
     Print("/sd status")
     Print("/sd spell auto | /sd spell <spellID>")
     Print("/sd filter <" .. FILTER_HELP .. "> (then /reload)")
@@ -1008,18 +1009,18 @@ local function HandleSpellCommand(argument)
         addon.db.manualSpellID = nil
         addon:RefreshSpell()
         Print("spell selection set to auto")
-        return
+        return true
     end
 
     local spellID = tonumber(argument)
     local info = spellID and addon.Spells:GetInfo(spellID)
     if not info then
         Print("unknown spell ID: " .. tostring(argument))
-        return
+        return false
     end
     if not info.known then
         Print("spell is not known by this character: " .. info.name .. " (" .. spellID .. ")")
-        return
+        return false
     end
 
     addon.db.manualSpellID = spellID
@@ -1028,6 +1029,7 @@ local function HandleSpellCommand(argument)
     if InCombatLockdown() then
         Print("secure attributes will update after combat")
     end
+    return true
 end
 
 local function HandleFilterCommand(argument)
@@ -1161,7 +1163,7 @@ local function ParseScaleArgument(argument)
     return scale, layoutKey
 end
 
-local function HandleScaleCommand(argument)
+local function HandleScaleCommand(argument, quiet)
     local scale, layoutKey = ParseScaleArgument(argument)
     if not scale or not layoutKey or scale < MIN_SCALE or scale > MAX_SCALE then
         Print(string.format("usage: /sd scale <%.2f-%.2f> [party|raid]", MIN_SCALE, MAX_SCALE))
@@ -1170,9 +1172,11 @@ local function HandleScaleCommand(argument)
 
     addon.db.layouts[layoutKey].scale = scale
     ApplyFrameSettings(layoutKey)
-    Print(string.format("%s scale set to %.2f", layoutKey, scale))
-    if InCombatLockdown() then
-        Print("layout will update after combat")
+    if not quiet then
+        Print(string.format("%s scale set to %.2f", layoutKey, scale))
+        if InCombatLockdown() then
+            Print("layout will update after combat")
+        end
     end
 end
 
@@ -1198,12 +1202,35 @@ local function ResetLayout(argument)
     end
 end
 
+-- Both entry points use the same validation and combat-deferred updates.
+-- Options always reads addon.db through getters: reset replaces layout tables.
+addon.Config = {
+    SetLocked = HandleLockCommand,
+    SetTheme = HandleThemeCommand,
+    SetNames = HandleNamesCommand,
+    SetRaidLayout = HandleRaidLayoutCommand,
+    SetNoDispel = HandleNoDispelCommand,
+    SetFilter = HandleFilterCommand,
+    SetSpell = HandleSpellCommand,
+    SetScale = function(layoutKey, scale)
+        HandleScaleCommand(layoutKey .. " " .. tostring(scale), true)
+    end,
+    ResetLayout = ResetLayout,
+    PrintStatus = PrintStatus,
+}
+
 local function HandleSlashCommand(message)
     local command, argument = string.match(message or "", "^%s*(%S*)%s*(.-)%s*$")
     command = string.lower(command or "")
     argument = string.lower(argument or "")
 
-    if command == "status" then
+    if command == "" or command == "options" then
+        if addon.Options then
+            addon.Options:Open()
+        else
+            PrintHelp()
+        end
+    elseif command == "status" then
         PrintStatus()
     elseif command == "spell" then
         HandleSpellCommand(argument)
@@ -1227,6 +1254,9 @@ local function HandleSlashCommand(message)
         ResetLayout(argument)
     else
         PrintHelp()
+    end
+    if addon.Options then
+        addon.Options:Refresh()
     end
 end
 
@@ -1265,6 +1295,9 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         InitializeDatabase()
         RegisterSlashCommands()
         CreateUI()
+        if addon.Options then
+            addon.Options:Register()
+        end
 
         self:RegisterEvent("PLAYER_LOGIN")
         self:RegisterEvent("PLAYER_ENTERING_WORLD")

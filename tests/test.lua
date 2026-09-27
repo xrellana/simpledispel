@@ -325,19 +325,35 @@ addon.AuraDisplay = {
 }
 
 addon.Spells = {
+    Candidates = {
+        PRIEST = { 527 },
+    },
     Resolve = function()
         return resolvedSpell
     end,
     GetInfo = function(_, spellID)
-        return { id = spellID, name = "Manual", icon = 1, known = true }
+        if spellID ~= 527 then
+            return nil
+        end
+        return { id = spellID, name = "Purify", icon = 1, known = true }
     end,
 }
+
+function UnitClass()
+    return "PRIEST", "PRIEST"
+end
+
+local settingsMockChunk = assert(loadfile("tests/settings_mock.lua"))
+settingsMockChunk()
 
 local themeChunk = assert(loadfile("Theme.lua"))
 themeChunk("SimpleDispel", addon)
 
 local coreChunk = assert(loadfile("Core.lua"))
 coreChunk("SimpleDispel", addon)
+
+local optionsChunk = assert(loadfile("Options.lua"))
+optionsChunk("SimpleDispel", addon)
 
 local eventFrame
 for _, frame in ipairs(createdFrames) do
@@ -349,6 +365,68 @@ end
 assert(eventFrame, "ADDON_LOADED event frame was not created")
 
 eventFrame.scripts.OnEvent(eventFrame, "ADDON_LOADED", "SimpleDispel")
+
+-- The options module registers one native Settings category during the same
+-- ADDON_LOADED transaction as Core.  Registering again must be idempotent so
+-- opening the panel or a reload cannot create duplicate categories.
+local options = addon.Options
+assert(options and options.settings, "options module did not attach to the addon")
+local optionsCategory = Settings.GetCategory("SimpleDispel")
+assert(optionsCategory, "SimpleDispel Settings category was not created")
+assert(#Settings.categories == 1, "options must create exactly one Settings category")
+assert(#Settings.registeredCategories == 1, "options category was not registered")
+assert(optionsCategory.registered == true, "options category was not registered as an addon category")
+local registeredCategoryCount = #Settings.registeredCategories
+local categoryCount = #Settings.categories
+assert(options:Register() == true, "re-registering options should succeed")
+assert(#Settings.categories == categoryCount, "options re-registration duplicated the category")
+assert(#Settings.registeredCategories == registeredCategoryCount, "options re-registration duplicated registration")
+
+local function OptionSetting(key)
+    local setting = options.settings[key]
+    assert(setting, "missing options setting: " .. key)
+    return setting
+end
+
+local function OptionValue(key)
+    return OptionSetting(key):GetValue()
+end
+
+assert(OptionValue("Locked") == false, "locked option did not read the migrated default")
+assert(OptionValue("Theme") == "dark", "theme option did not read the migrated default")
+assert(OptionValue("PartyNames") == true, "party names option did not read the migrated default")
+assert(OptionValue("ShowWithoutDispel") == false, "no-dispel option did not read the migrated default")
+assert(OptionValue("PartyScale") == 90, "party scale option did not read the migrated legacy scale")
+assert(OptionValue("RaidScale") == 100, "raid scale option did not read its default")
+assert(OptionValue("RaidLayout") == "across", "raid layout option did not read its migrated default")
+assert(OptionValue("FilterMode") == "mine", "filter option did not read its default")
+assert(OptionValue("SpellID") == 0, "spell option did not represent automatic detection as zero")
+
+local partyScaleControl = OptionSetting("PartyScale").control
+local partyScaleOptions = partyScaleControl.arguments[1]
+assert(partyScaleControl.type == "slider", "party scale must use a slider control")
+assert(partyScaleOptions.minimumValue == 60, "party scale minimum is wrong")
+assert(partyScaleOptions.maximumValue == 200, "party scale maximum is wrong")
+assert(partyScaleOptions.valueStep == 1, "party scale step is wrong")
+assert(OptionSetting("Locked").control.type == "checkbox", "locked must use a checkbox")
+assert(OptionSetting("Theme").control.type == "dropdown", "theme must use a dropdown")
+assert(OptionSetting("RaidLayout").control.type == "dropdown", "raid layout must use a dropdown")
+assert(OptionSetting("SpellID").control.type == "dropdown", "spell selection must use a dropdown")
+
+local spellChoices = options:GetSpellChoices()
+assert(spellChoices[1].value == 0, "spell choices must put automatic detection first")
+assert(spellChoices[2].value == 527, "spell choices must include the known candidate spell")
+
+local notifyBeforeOpen = OptionSetting("Theme").notifyCount
+SlashCmdList.SIMPLEDISPEL("options")
+assert(Settings.openedCategory == optionsCategory:GetID(), "options command opened the wrong category")
+assert(OptionSetting("Theme").notifyCount > notifyBeforeOpen, "opening options must refresh setting values")
+local notifyAfterOptions = OptionSetting("Theme").notifyCount
+local setCallsBeforeOpen = OptionSetting("Theme").setCalls
+SlashCmdList.SIMPLEDISPEL("")
+assert(Settings.openedCategory == optionsCategory:GetID(), "bare slash command must open the options category")
+assert(OptionSetting("Theme").notifyCount > notifyAfterOptions, "bare slash command must refresh settings")
+assert(OptionSetting("Theme").setCalls == setCallsBeforeOpen, "refresh must not call option setters")
 
 assert(SimpleDispelDB.schemaVersion == 7, "database schema was not upgraded")
 assert(SimpleDispelDB.showWithoutDispel == false, "a database without the option must hide frames without a dispel")
@@ -896,5 +974,185 @@ partyHandle.scripts.OnEnter()
 partyHandle.scripts.OnDragStart()
 partyHandle.scripts.OnHide()
 assert(partyRoot.moving == false and partyInfo.handleBackground.alpha == 0, "hiding the party handle must stop movement and clear hover")
+
+-- Options integration --------------------------------------------------------
+-- Each proxy writes through Core.Config, so the same saved-variable and frame
+-- behavior must be observable whether a value came from Settings or /sd.
+local function SetOption(key, value)
+    return OptionSetting(key):SetValue(value)
+end
+
+SetOption("Locked", true)
+assert(SimpleDispelDB.locked == true, "locked option did not persist")
+assert(addon.frames.party.dragHandle.shown == false, "locked option did not hide the party handle")
+assert(addon.frames.raid.dragHandle.shown == false, "locked option did not hide the raid handle")
+SetOption("Locked", false)
+assert(SimpleDispelDB.locked == false, "unlock option did not persist")
+assert(addon.frames.party.dragHandle.shown == true, "unlock option did not restore the party handle")
+
+SetOption("Theme", "light")
+assert(SimpleDispelDB.theme == "light", "theme option did not persist")
+assert(addon.frames.party.background.calls.SetColorTexture[1] == 0.88, "theme option did not repaint party")
+assert(addon.frames.raid.background.calls.SetColorTexture[1] == 0.88, "theme option did not repaint raid")
+SetOption("Theme", "dark")
+
+SetOption("PartyNames", false)
+assert(SimpleDispelDB.hidePartyNames == true, "party names option did not persist hide")
+assert(createdButtons[1].height == 48, "party names option did not collapse the name band")
+assert(partyRoot.height == 56, "party names option did not resize the party frame")
+SetOption("PartyNames", true)
+assert(SimpleDispelDB.hidePartyNames == false, "party names option did not persist show")
+assert(createdButtons[1].height == 62, "party names option did not restore the name band")
+assert(partyRoot.height == 70, "party names option did not restore the party frame")
+
+-- Sliders expose percentages while Core stores decimal scales.  Test both
+-- endpoints and rejected values for each independent layout.
+SetOption("PartyScale", 60)
+assert(SimpleDispelDB.layouts.party.scale == 0.60, "party scale minimum was not applied")
+assert(partyRoot.scale == 0.60, "party frame did not receive the minimum scale")
+SetOption("PartyScale", 200)
+assert(SimpleDispelDB.layouts.party.scale == 2.00, "party scale maximum was not applied")
+assert(partyRoot.scale == 2.00, "party frame did not receive the maximum scale")
+SetOption("PartyScale", 201)
+assert(SimpleDispelDB.layouts.party.scale == 2.00, "out-of-range party scale must be rejected")
+SetOption("RaidScale", 60)
+assert(SimpleDispelDB.layouts.raid.scale == 0.60, "raid scale minimum was not applied")
+assert(raidRoot.scale == 0.60, "raid frame did not receive the minimum scale")
+SetOption("RaidScale", 200)
+assert(SimpleDispelDB.layouts.raid.scale == 2.00, "raid scale maximum was not applied")
+assert(raidRoot.scale == 2.00, "raid frame did not receive the maximum scale")
+SetOption("RaidScale", 59)
+assert(SimpleDispelDB.layouts.raid.scale == 2.00, "out-of-range raid scale must be rejected")
+
+-- The filter is deliberately saved without rebuilding existing AuraContainers;
+-- users apply it by reloading the interface.
+local existingAuraFilter = addon.auraContainers[1].filter
+SetOption("FilterMode", "all")
+assert(SimpleDispelDB.filterMode == "all", "filter option did not persist")
+assert(addon.auraContainers[1].filter == existingAuraFilter, "filter option must wait for reload")
+
+SetOption("RaidLayout", "across")
+assert(SimpleDispelDB.raidLayout == "across", "raid layout option did not persist")
+assert(RaidPoint(1)[4] == 4, "raid layout option did not reposition the raid grid")
+SetOption("RaidLayout", "down")
+assert(SimpleDispelDB.raidLayout == "down", "raid layout option did not restore down mode")
+
+-- Slash commands refresh native settings, and Refresh must use live getters
+-- after Core replaces a layout table during reset.
+local themeNotifyBeforeSlash = OptionSetting("Theme").notifyCount
+local themeSetCallsBeforeSlash = OptionSetting("Theme").setCalls
+SlashCmdList.SIMPLEDISPEL("theme light")
+assert(OptionValue("Theme") == "light", "theme slash command left a stale options value")
+assert(OptionSetting("Theme").notifyCount > themeNotifyBeforeSlash, "slash command did not refresh options")
+assert(OptionSetting("Theme").setCalls == themeSetCallsBeforeSlash, "slash refresh called a setting setter")
+SlashCmdList.SIMPLEDISPEL("scale raid 0.90")
+assert(OptionValue("RaidScale") == 90, "scale slash command left a stale percentage getter")
+
+local oldPartyLayout = SimpleDispelDB.layouts.party
+SetOption("PartyScale", 80)
+assert(OptionValue("PartyScale") == 80, "party scale getter did not reflect the option setter")
+local resetPartyInitializer
+for _, initializer in ipairs(optionsCategory.initializers) do
+    if initializer.kind == "button" and initializer.arguments[1] == "Party position and scale" then
+        resetPartyInitializer = initializer
+        break
+    end
+end
+assert(resetPartyInitializer, "party reset button was not added to the category")
+resetPartyInitializer.arguments[3]()
+assert(SimpleDispelDB.layouts.party ~= oldPartyLayout, "party reset must replace the layout table")
+assert(OptionValue("PartyScale") == 100, "party scale getter retained a stale reset layout")
+assert(partyRoot.scale == 1.00, "party reset did not apply the default scale")
+
+-- Spell choices and manual-ID validation use the same known-spell boundary as
+-- Core's command path.  Zero is the Settings representation of auto mode.
+SetOption("SpellID", 527)
+assert(SimpleDispelDB.manualSpellID == 527, "manual spell option did not persist")
+assert(OptionValue("SpellID") == 527, "manual spell getter did not expose the saved ID")
+local spellBeforeInvalid = SimpleDispelDB.manualSpellID
+SetOption("SpellID", 9999)
+assert(SimpleDispelDB.manualSpellID == spellBeforeInvalid, "unknown spell option changed the saved spell")
+assert(options:ApplySpellID("0") == false, "popup spell validation must reject zero")
+assert(options:ApplySpellID("2147483648") == false, "popup spell validation must reject oversized IDs")
+assert(options:ApplySpellID("527") == true, "popup spell validation rejected a known spell")
+SetOption("SpellID", 0)
+assert(SimpleDispelDB.manualSpellID == nil, "spell auto option did not clear the override")
+assert(OptionValue("SpellID") == 0, "spell auto getter did not return zero")
+
+local popup = StaticPopup_Show("SIMPLEDISPEL_SPELL_ID")
+assert(popup.editBox.text == "", "spell popup did not initialize from automatic mode")
+popup.editBox:SetText("9999")
+local keepPopupOpen = StaticPopupDialogs.SIMPLEDISPEL_SPELL_ID.OnAccept(popup)
+assert(keepPopupOpen == true and popup.shown == true, "invalid popup input must remain open")
+assert(popup:GetTextFontString().text ~= "", "invalid popup input did not show validation text")
+popup.editBox:SetText("527")
+StaticPopupDialogs.SIMPLEDISPEL_SPELL_ID.EditBoxOnEnterPressed(popup.editBox)
+assert(popup.shown == false, "valid popup input must close the popup")
+assert(SimpleDispelDB.manualSpellID == 527, "valid popup input did not persist the spell")
+
+-- Settings changes that touch protected button geometry are saved during
+-- combat but applied only after PLAYER_REGEN_ENABLED.
+SetOption("PartyScale", 100)
+SetOption("RaidScale", 100)
+SetOption("PartyNames", true)
+SetOption("RaidLayout", "down")
+raidRosterInfo = {}
+for i = 1, 5 do raidRosterInfo[i] = 1 end
+groupMemberCount = 5
+eventFrame.scripts.OnEvent(eventFrame, "GROUP_ROSTER_UPDATE")
+local partyScaleBeforeCombat = partyRoot.scale
+local partyHeightBeforeCombat = partyRoot.height
+local partyButtonHeightBeforeCombat = createdButtons[1].height
+local raidPointBeforeCombat = { RaidPoint(2)[4], RaidPoint(2)[5] }
+inCombat = true
+SetOption("PartyScale", 80)
+assert(SimpleDispelDB.layouts.party.scale == 0.80, "combat party scale was not saved")
+assert(partyRoot.scale == partyScaleBeforeCombat, "party scale applied protected layout during combat")
+assert(addon.pendingLayoutRefresh == true, "combat party scale did not defer layout")
+SetOption("PartyNames", false)
+assert(SimpleDispelDB.hidePartyNames == true, "combat party names change was not saved")
+assert(partyRoot.height == partyHeightBeforeCombat, "party frame resized during combat")
+assert(createdButtons[1].height == partyButtonHeightBeforeCombat, "party button resized during combat")
+assert(addon.pendingNameBandRefresh == true, "combat party names change did not defer geometry")
+SetOption("RaidLayout", "across")
+assert(SimpleDispelDB.raidLayout == "across", "combat raid layout was not saved")
+assert(RaidPoint(2)[4] == raidPointBeforeCombat[1] and RaidPoint(2)[5] == raidPointBeforeCombat[2],
+    "raid layout moved protected buttons during combat")
+inCombat = false
+eventFrame.scripts.OnEvent(eventFrame, "PLAYER_REGEN_ENABLED")
+assert(addon.pendingLayoutRefresh == false, "combat layout changes did not flush")
+assert(addon.pendingNameBandRefresh == false, "combat party names change did not flush")
+assert(partyRoot.scale == 0.80, "deferred party scale was not applied")
+assert(partyRoot.height == 56 and createdButtons[1].height == 48, "deferred party names change was not applied")
+assert(SimpleDispelDB.raidLayout == "across", "deferred raid layout was lost")
+assert(RaidPoint(2)[4] ~= raidPointBeforeCombat[1] or RaidPoint(2)[5] ~= raidPointBeforeCombat[2],
+    "deferred raid layout did not reposition the grid")
+
+-- ShowWithoutDispel is a visibility setting, so exercise its empty-state
+-- frame path as well as persistence.
+resolvedSpell = nil
+eventFrame.scripts.OnEvent(eventFrame, "SPELLS_CHANGED")
+assert(addon.activeSpell == nil, "test setup did not clear the active spell")
+SetOption("ShowWithoutDispel", true)
+assert(SimpleDispelDB.showWithoutDispel == true, "show-without-dispel option did not persist")
+assert(addon.frames.raid.emptyState.shown == true, "show-without-dispel option did not show the empty state")
+SetOption("ShowWithoutDispel", false)
+assert(SimpleDispelDB.showWithoutDispel == false, "hide-without-dispel option did not persist")
+assert(CurrentVisibility("SimpleDispelRaidFrame") == "hide", "hide-without-dispel option did not hide raid")
+resolvedSpell = { id = 527, name = "Purify", icon = 1, known = true, source = "auto" }
+eventFrame.scripts.OnEvent(eventFrame, "SPELLS_CHANGED")
+assert(addon.activeSpell and addon.activeSpell.id == 527, "automatic spell detection was not restored")
+
+local notifySnapshot = {}
+local setterSnapshot = {}
+for key, setting in pairs(options.settings) do
+    notifySnapshot[key] = setting.notifyCount
+    setterSnapshot[key] = setting.setCalls
+end
+options:Refresh()
+for key, setting in pairs(options.settings) do
+    assert(setting.notifyCount == notifySnapshot[key] + 1, key .. " did not receive a refresh notification")
+    assert(setting.setCalls == setterSnapshot[key], key .. " refresh unexpectedly called its setter")
+end
 
 print("SimpleDispel mock runtime: PASS")
