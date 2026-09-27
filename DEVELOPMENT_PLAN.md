@@ -1,5 +1,7 @@
 # SimpleDispel 当前开发状态与后续计划
 
+2026-09-27 工作区更新：Party 和 Raid 均改为左上角左侧外缘的 16 × 28 悬停拖动把手，去掉两种布局原有标题的 22 像素留白和大背景；锁定、解锁不再移动布局，锁定或进入战斗会禁用并停止拖动。Party 按钮、图标和名字条尺寸不变，外框高度为显示名字 70、隐藏名字 56。悬停、拖动、隐藏、锁定和战斗切换的离线测试通过，四个 Lua 测试套件均通过。实际客户端的鼠标命中、屏幕边缘约束和战斗行为仍待按 `BETA_TESTING.md` 验证。Party/Raid 独立缩放沿用 `/sd scale <party|raid> <0.60-2.00>`，默认均为 1.00。本节以下保留此前审计记录，其中旧版 Party/Raid 标题栏行为以此更新为准。
+
 ## 1. 审计结论
 
 - **审计日期：** 2026-08-17
@@ -63,7 +65,7 @@ SimpleDispel 的“一键驱散”是：插件为固定 unit token 创建成员�
 | 能力 | 状态 | 代码证据 | review 说明 |
 |---|---|---|---|
 | Manifest、版本和 SavedVariables | 代码已实现 | `SimpleDispel.toc:1-11` | 当前版本为 `1.0.0`。加载是否无 Lua 错误仍需游戏内确认。 |
-| Party 五个固定 slot | 代码已实现；mock 已覆盖 | `Core.lua:305-337`；`tests/test.lua:223-231` | 固定为 `player`、`party1`-`party4`。 |
+| Party 五个固定 slot | 代码已实现；mock 已覆盖 | `Core.lua:305-337`；`tests/test.lua:223-231` | 固定为 `player`、`party1`-`party4`；按钮保持 48 × 62（隐藏名字时 48 × 48），外框高度为 70/56。 |
 | Raid 四十个固定 slot | 代码已实现；mock 已覆盖 | `Core.lua:370-408`；`tests/test.lua:223-231` | 固定为 `raid1`-`raid40`，不动态重排。 |
 | Party/Raid 安全显示切换 | 代码已实现；mock 已覆盖 | `Core.lua:230-236`、`SecureButtons.lua:53-58`；`tests/test.lua:249-261` | 具体客户端 protected frame 行为仍待验证。 |
 | Raid 八列及按人数调整行数 | 代码已实现；mock 已覆盖 | `Core.lua`；`tests/test.lua` | 固定 28 × 28 方格，8 列、最多 5 行；10/20/25/30/40 人分别使用 2/3/4/4/5 行。 |
@@ -79,7 +81,7 @@ SimpleDispel 的“一键驱散”是：插件为固定 unit token 创建成员�
 | 专精、技能和天赋变化触发刷新 | 代码已实现 | `Core.lua:633-670` | 当前只是重新运行职业候选列表，并未实现真正的专精/天赋条件逻辑。 |
 | 手动 spell ID override | 代码已实现 | `Core.lua:491-512`；`DispelSpells.lua:80-87` | 已知风险：只确认客户端能取得 spell 信息，不强制确认角色已学会该 spell。 |
 | SavedVariables、旧版迁移和 Party/Raid 独立缩放 | 代码已实现；mock 已覆盖 | `Core.lua:78-107,149-183`；`tests/test.lua:219-222,267-301` | schema 当前为 3。 |
-| 锁定、解锁、拖动、重置和战斗延迟 | 代码已实现；部分 mock 已覆盖 | `Core.lua`；`tests/test.lua` | 锁定时隐藏 Raid 标题和大背景并上移网格；解锁时显示小型 `SD` 拖动锚点。战斗内实际 protected 行为仍需验证。 |
+| 锁定、解锁、拖动、重置和战斗延迟 | 代码已实现；部分 mock 已覆盖 | `Core.lua`；`tests/test.lua` | Party/Raid 都没有顶部标题留白；两者使用左上角左侧外缘的 16 × 28 悬停把手。正常驱散布局隐藏大背景，锁定或进入战斗会禁用并停止拖动，布局尺寸和位置偏移不因锁定改变。战斗内实际 protected 行为仍需验证。 |
 | 诊断命令 `/sd status` | 代码已实现 | `Core.lua:438-480` | 可输出版本、Build、模式、容器数、过滤器和技能信息。 |
 | 过滤器、缩放、重置和 spell 命令 | 代码已实现；部分 mock 已覆盖 | `Core.lua:482-610`；`tests/test.lua:267-288` | 修改 filter 后需要 `/reload` 重建容器。 |
 | Release 打包工作流 | 代码已实现 | `.github/workflows/release.yml:1-77` | 只打包 Lua/TOC 并发布；当前没有 test job。 |
@@ -88,7 +90,7 @@ SimpleDispel 的“一键驱散”是：插件为固定 unit token 创建成员�
 
 已有测试覆盖：
 
-- `tests/test.lua`：SavedVariables 迁移、45 个按钮和容器的结构、unit-button 设置、网格位置、visibility driver、Raid 高度、缩放/重置和战斗延迟。
+- `tests/test.lua`：SavedVariables 迁移、45 个按钮和容器的结构、unit-button 设置、网格位置、visibility driver、Party/Raid 高度、缩放/重置、悬停把手、拖动清理和战斗延迟。
 - `tests/secure_button_test.lua`：固定 unit、左右键注册、`useOnKeyDown`、spell attribute、范围/冷却合成视觉状态、Party/Raid visibility driver。
 - `tests/aura_input_test.lua`：Aura Button 尺寸、图标、cooldown、层数、持续时间、native mouse motion 和点击传播初始化。
 
@@ -104,7 +106,7 @@ SimpleDispel 的“一键驱散”是：插件为固定 unit token 创建成员�
 - Party 中点击空白区域、Aura 图标中心和图标边缘，均只对被点击的固定 unit 施放技能。
 - 点击前后当前目标保持不变；射程外、死亡、冷却或无可驱散效果时只产生正常施法失败。
 - Aura 出现、消失、倒计时、层数、tooltip、过滤器结果和图标点击传播符合预期。
-- 10/20/25/30/40 人 Raid 均显示为 28 × 28、8 列、最多 5 行的固定网格；锁定隐藏 Raid 标题/大背景并上移网格，解锁显示小型 `SD` 锚点。
+- Party 外框在显示/隐藏名字时分别为 70/56，按钮、图标和名字条尺寸保持不变；10/20/25/30/40 人 Raid 均显示为 28 × 28、8 列、最多 5 行的固定网格。两种布局都没有顶部标题留白，解锁时左上角左侧外缘显示 16 × 28 悬停把手，锁定或战斗时禁用并停止拖动。
 - 范围提示按当前实际驱散 spell 约每 0.25 秒刷新；`true`、`false`、`nil` 的视觉状态正确，提示不禁用点击，也不把 LoS 当作范围判断。
 - 驱散实际 CD 期间 debuff 继续显示，方块出现中性暗层和琥珀色 `CD`；普通 GCD 不触发，CD 结束后恢复，且与范围外红边/`×` 正确共存。
 - 战斗中加入、离开、掉线、死亡、复活、换队和 roster 变化不产生 protected/forbidden 错误；脱战后延迟更新能够恢复。
@@ -130,7 +132,7 @@ SimpleDispel 的“一键驱散”是：插件为固定 unit token 创建成员�
 
 - `/sd spell <spellID>` 不强制验证角色已学会该 spell；误设未知或不可用技能可能导致按钮不可施法。
 - 每个单位只显示一个系统过滤后的 `dispel` slot；过滤器具体结果由客户端决定，插件不解析 aura。
-- Raid roster 在战斗中变化时，外框高度可能暂时保持旧值，计划在脱战后更新。
+- Party 名字显示设置或 Raid roster 在战斗中变化时，外框尺寸可能暂时保持旧值，计划在脱战后更新。
 - Raid 使用固定 `raid1`-`raid40` 顺序和 8 列、最多 5 行的 28 × 28 方格；普通 unit-button tooltip 只用于识别，不保证按姓名、职业或职责排序。
 - 范围视觉状态约每 0.25 秒刷新，可能因客户端延迟暂时滞后；`nil` 表示未知，提示不能判断 LoS；即使范围外也保留点击能力。
 - 45 个 Aura Container 的真实性能和 taint 尚无证据。

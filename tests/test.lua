@@ -449,7 +449,8 @@ assert(partyVisibility == "hide", "party frame must start hidden before a dispel
 assert(raidVisibility == "hide", "raid frame must start hidden before a dispel is resolved")
 assert(#stateDrivers == 2, "each root must register exactly one visibility driver while it is built")
 assert(raidRoot.width == 246, "compact raid frame width is wrong")
-assert(addon.frames.party.root.height == 92, "party frame must grow to fit the dedicated label band")
+assert(addon.frames.party.root.height == 70, "party frame must fit the name band without a title bar")
+assert(createdButtons[1].point[5] == -4, "party grid must not reserve title space")
 
 -- Party names are shown by default, so an upgrade keeps the 1.3.x appearance.
 assert(SimpleDispelDB.hidePartyNames == false, "party names must be shown by default")
@@ -460,7 +461,7 @@ assert(SimpleDispelDB.hidePartyNames == true, "names command did not persist")
 assert(createdButtons[1].nameBandShown == false, "hiding names did not collapse the player band")
 assert(createdButtons[5].nameBandShown == false, "hiding names did not collapse the party4 band")
 assert(createdButtons[1].height == 48, "a party button without its name band must be square")
-assert(addon.frames.party.root.height == 78, "the party frame must shrink with the collapsed band")
+assert(addon.frames.party.root.height == 56, "the party frame must shrink with the collapsed band")
 assert(
     rawget(createdButtons[6], "nameBandShown") == nil,
     "raid squares carry no name band and must not be resized"
@@ -469,7 +470,7 @@ assert(
 SlashCmdList.SIMPLEDISPEL("names show")
 assert(SimpleDispelDB.hidePartyNames == false, "showing names again did not persist")
 assert(createdButtons[1].height == 62, "restoring the band must restore the button height")
-assert(addon.frames.party.root.height == 92, "restoring the band must restore the frame height")
+assert(addon.frames.party.root.height == 70, "restoring the band must restore the frame height")
 
 SlashCmdList.SIMPLEDISPEL("names sideways")
 assert(SimpleDispelDB.hidePartyNames == false, "an unrecognised names argument must change nothing")
@@ -479,15 +480,17 @@ assert(SimpleDispelDB.hidePartyNames == false, "an unrecognised names argument m
 inCombat = true
 SlashCmdList.SIMPLEDISPEL("names hide")
 assert(addon.pendingNameBandRefresh == true, "combat name band change was not deferred")
-assert(addon.frames.party.root.height == 92, "party frame resized during combat")
+assert(addon.frames.party.root.height == 70, "party frame resized during combat")
 assert(createdButtons[1].height == 62, "party button resized during combat")
 inCombat = false
 eventFrame.scripts.OnEvent(eventFrame, "PLAYER_REGEN_ENABLED")
 assert(addon.pendingNameBandRefresh == false, "deferred name band change was not applied")
-assert(addon.frames.party.root.height == 78, "deferred name band change did not resize the frame")
+assert(addon.frames.party.root.height == 56, "deferred name band change did not resize the frame")
 SlashCmdList.SIMPLEDISPEL("names show")
-assert(addon.frames.raid.dragHandle.width == 28, "raid drag handle must stay compact")
-assert(addon.frames.raid.dragHandle.height == 22, "raid drag handle height is wrong")
+assert(addon.frames.raid.dragHandle.width == 16, "raid drag handle must stay narrow")
+assert(addon.frames.raid.dragHandle.height == 28, "raid drag handle height is wrong")
+assert(addon.frames.raid.dragHandle.point[1] == "TOPRIGHT" and addon.frames.raid.dragHandle.point[3] == "TOPLEFT", "raid handle must sit outside the grid")
+assert(raidRoot.calls.SetClampRectInsets[1] == -16, "screen clamping must include the external handle")
 
 eventFrame.scripts.OnEvent(eventFrame, "PLAYER_LOGIN")
 assert(addon.activeSpell and addon.activeSpell.id == 527, "spell was not assigned at login")
@@ -622,16 +625,16 @@ assert(SimpleDispelDB.layouts.raid.scale == 0.75, "explicit raid scale command f
 
 inRaid = true
 local raidHeightCases = {
-    { members = 1, height = 58 },
-    { members = 8, height = 58 },
-    { members = 9, height = 88 },
-    { members = 16, height = 88 },
-    { members = 17, height = 118 },
-    { members = 25, height = 148 },
-    { members = 32, height = 148 },
-    { members = 33, height = 178 },
-    { members = 40, height = 178 },
-    { members = 25, height = 148 },
+    { members = 1, height = 36 },
+    { members = 8, height = 36 },
+    { members = 9, height = 66 },
+    { members = 16, height = 66 },
+    { members = 17, height = 96 },
+    { members = 25, height = 126 },
+    { members = 32, height = 126 },
+    { members = 33, height = 156 },
+    { members = 40, height = 156 },
+    { members = 25, height = 126 },
 }
 for _, case in ipairs(raidHeightCases) do
     groupMemberCount = case.members
@@ -647,13 +650,13 @@ assert(SimpleDispelDB.locked == true, "lock command did not persist")
 assert(addon.frames.raid.dragHandle.shown == false, "locked raid handle must be hidden")
 assert(addon.frames.raid.background.shown == false, "locked raid background must be hidden")
 assert(raidRoot.height == 126, "locked 25-player raid height is wrong")
-assert(createdButtons[6].point[5] == -4, "locked raid grid must move into the former title space")
+assert(createdButtons[6].point[5] == -4, "raid grid must have no title space")
 SlashCmdList.SIMPLEDISPEL("unlock")
 assert(SimpleDispelDB.locked == false, "unlock command did not persist")
-assert(addon.frames.raid.dragHandle.shown == true, "unlocked raid handle must be visible")
-assert(addon.frames.raid.background.shown == true, "unlocked raid background must be visible")
-assert(raidRoot.height == 148, "unlocked 25-player raid height is wrong")
-assert(createdButtons[6].point[5] == unlockedRaidY, "unlock must restore the raid grid offset")
+assert(addon.frames.raid.dragHandle.shown == true, "unlocked raid handle must accept hover")
+assert(addon.frames.raid.background.shown == false, "unlocked raid background must stay hidden")
+assert(raidRoot.height == 126, "unlock must not add title space")
+assert(createdButtons[6].point[5] == unlockedRaidY, "unlock must not shift the raid grid")
 SlashCmdList.SIMPLEDISPEL("scale 0.80")
 assert(SimpleDispelDB.layouts.raid.scale == 0.80, "active raid scale command failed")
 
@@ -665,14 +668,14 @@ inCombat = true
 groupMemberCount = 40
 eventFrame.scripts.OnEvent(eventFrame, "GROUP_ROSTER_UPDATE")
 assert(addon.pendingRaidSizeRefresh, "combat raid resize was not deferred")
-assert(raidRoot.height == 148, "raid frame resized during combat")
+assert(raidRoot.height == 126, "raid frame resized during combat")
 SlashCmdList.SIMPLEDISPEL("scale raid 0.85")
 assert(addon.pendingLayoutRefresh, "combat layout update was not deferred")
 inCombat = false
 eventFrame.scripts.OnEvent(eventFrame, "PLAYER_REGEN_ENABLED")
 assert(not addon.pendingLayoutRefresh, "deferred layout update was not applied")
 assert(not addon.pendingRaidSizeRefresh, "deferred raid resize was not applied")
-assert(raidRoot.height == 178, "40-player raid frame must use five rows")
+assert(raidRoot.height == 156, "40-player raid frame must use five rows")
 
 assert(eventFrame.events.PLAYER_REGEN_DISABLED, "combat start event was not registered")
 
@@ -697,7 +700,7 @@ assert(RaidPoint(1)[5] ~= RaidPoint(2)[5], "members within a group occupy distin
 assert(RaidPoint(6)[4] ~= RaidPoint(1)[4], "raid6 must start the next occupied column")
 assert(RaidPoint(6)[5] == RaidPoint(1)[5], "the first member of every group starts at row 0")
 assert(raidRoot.width == 96, "three occupied groups across must produce a three-column frame")
-assert(raidRoot.height == 178, "a five-member group must produce a five-row frame")
+assert(raidRoot.height == 156, "a five-member group must produce a five-row frame")
 
 -- Scenario 2: the same roster transposed with "down".
 SlashCmdList.SIMPLEDISPEL("raidlayout down")
@@ -706,7 +709,7 @@ assert(RaidPoint(1)[4] ~= RaidPoint(2)[4], "down mode spreads a group's members 
 assert(RaidPoint(6)[5] ~= RaidPoint(1)[5], "down mode starts the next occupied group on its own row")
 assert(RaidPoint(6)[4] == RaidPoint(1)[4], "down mode returns every group to column 0")
 assert(raidRoot.width == 156, "down mode sizes columns to the largest group")
-assert(raidRoot.height == 118, "down mode sizes rows to the occupied group count")
+assert(raidRoot.height == 96, "down mode sizes rows to the occupied group count")
 
 -- Scenario 3: compression. Groups 1, 2 and 5 are occupied; group 5 must land
 -- in the third column, not the fifth, and groups 3/4 leave no gap behind.
@@ -722,7 +725,7 @@ assert(RaidPoint(1)[4] == 4, "group 1 must anchor at column 0")
 assert(RaidPoint(6)[4] == 34, "group 2 must anchor at column 1")
 assert(RaidPoint(11)[4] == 64, "group 5 must compress into column 2 instead of column 4")
 assert(raidRoot.width == 96, "compression must still only report three occupied columns")
-assert(raidRoot.height == 178, "the largest occupied group still drives the row count")
+assert(raidRoot.height == 156, "the largest occupied group still drives the row count")
 
 -- Scenario 4: a non-full group leaves its trailing rows empty and must not
 -- pull the next group's members up into them.
@@ -738,8 +741,13 @@ assert(
     RaidPoint(1)[5] ~= RaidPoint(2)[5] and RaidPoint(2)[5] ~= RaidPoint(3)[5],
     "the short group's three members occupy three consecutive rows"
 )
-assert(raidRoot.width == 66, "two occupied groups clamp to the minimum compact width")
-assert(raidRoot.height == 178, "the larger group still drives the row count")
+assert(raidRoot.width == 66, "two occupied groups must use two columns")
+assert(raidRoot.height == 156, "the larger group still drives the row count")
+
+raidRosterInfo = { [1] = 1 }
+groupMemberCount = 1
+eventFrame.scripts.OnEvent(eventFrame, "GROUP_ROSTER_UPDATE")
+assert(raidRoot.width == 36, "one occupied group must not reserve a second column for the old title")
 
 -- Scenario 5: fallback. One malformed subgroup value must restore the old
 -- index-order grid for the entire roster, not just the bad entry.
@@ -751,7 +759,7 @@ assert(addon.raidGroupsUnavailable == true, "an out-of-range subgroup must fall 
 assert(RaidPoint(1)[5] == RaidPoint(2)[5], "the index-order fallback keeps a small roster on row 0")
 assert(RaidPoint(1)[4] ~= RaidPoint(2)[4], "the index-order fallback still spreads members across columns")
 assert(raidRoot.width == 156, "the fallback grid still sizes width from the member count")
-assert(raidRoot.height == 58, "the fallback grid still sizes height from the member count")
+assert(raidRoot.height == 36, "the fallback grid still sizes height from the member count")
 
 local layoutBeforeInvalidArgument = addon.db.raidLayout
 SlashCmdList.SIMPLEDISPEL("raidlayout sideways")
@@ -765,15 +773,84 @@ inCombat = false
 eventFrame.scripts.OnEvent(eventFrame, "PLAYER_REGEN_ENABLED")
 assert(not addon.pendingLayoutRefresh, "deferred raid layout change must apply once combat ends")
 
+-- The side handle appears on hover, stays visible through a drag, and never
+-- leaves a drag or stale highlight running through lock, hide, or combat.
+local raidInfo = addon.frames.raid
+local raidHandle = raidInfo.dragHandle
+assert(raidInfo.handleBackground.alpha == 0 and raidInfo.title.alpha == 0, "idle handle artwork must be invisible")
+assert(raidHandle.mouseEnabled == true, "idle unlocked handle must receive hover")
+raidHandle.scripts.OnEnter()
+assert(raidInfo.handleBackground.alpha == 1 and raidInfo.title.alpha == 1, "hover must reveal the handle")
+raidHandle.scripts.OnLeave()
+assert(raidInfo.handleBackground.alpha == 0, "leaving an idle handle must hide its artwork")
+raidHandle.scripts.OnEnter()
+raidHandle.scripts.OnDragStart()
+raidHandle.scripts.OnLeave()
+assert(raidRoot.moving == true and raidInfo.handleBackground.alpha == 1, "drag must remain visible after leaving the handle")
+raidRoot:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 140, -90)
+raidHandle.scripts.OnDragStop()
+assert(raidRoot.moving == false and raidInfo.handleBackground.alpha == 0, "release outside must stop and hide the handle")
+assert(SimpleDispelDB.layouts.raid.position.x == 140, "raid drag must save position")
+raidHandle.scripts.OnEnter()
+raidHandle.scripts.OnDragStart()
+raidHandle.scripts.OnDragStop()
+assert(raidInfo.handleBackground.alpha == 1, "release while hovered must keep the handle visible")
+raidHandle.scripts.OnDragStart()
+SlashCmdList.SIMPLEDISPEL("lock")
+assert(raidRoot.moving == false and raidHandle.mouseEnabled == false, "lock mid-drag must stop movement and disable the handle")
+raidHandle.scripts.OnDragStart()
+assert(raidRoot.moving == false, "locked raid cannot start a drag")
+SlashCmdList.SIMPLEDISPEL("unlock")
+raidHandle.scripts.OnDragStart()
+inCombat = true
+eventFrame.scripts.OnEvent(eventFrame, "PLAYER_REGEN_DISABLED")
+assert(raidRoot.moving == false and raidInfo.handleBackground.alpha == 0, "combat entry must stop dragging and hide artwork")
+assert(raidHandle.mouseEnabled == false, "combat handle must not intercept mouse input")
+raidHandle.scripts.OnDragStart()
+assert(raidRoot.moving == false, "combat must block raid dragging")
+inCombat = false
+eventFrame.scripts.OnEvent(eventFrame, "PLAYER_REGEN_ENABLED")
+assert(raidHandle.mouseEnabled == true, "combat exit must restore hover")
+raidHandle.scripts.OnEnter()
+raidHandle.scripts.OnDragStart()
+raidRoot.scripts.OnHide()
+assert(raidRoot.moving == false and raidInfo.handleBackground.alpha == 0, "root hide must stop drag and clear hover")
+raidHandle.scripts.OnEnter()
+raidHandle.scripts.OnDragStart()
+raidHandle.scripts.OnHide()
+assert(raidRoot.moving == false and raidInfo.handleBackground.alpha == 0, "handle hide must stop drag and clear hover")
+
 -- A drag left running keeps the frame on the cursor, so its unit buttons cover
 -- whatever the player points at and targeting stops working entirely.
 local partyRoot = addon.frames.party.root
 local partyHandle = addon.frames.party.dragHandle
+local partyInfo = addon.frames.party
+assert(partyHandle.width == 16 and partyHandle.height == 28, "party handle must match the compact raid handle")
+assert(partyHandle.point[1] == "TOPRIGHT" and partyHandle.point[3] == "TOPLEFT", "party handle must sit outside the grid")
+assert(partyRoot.calls.SetClampRectInsets[1] == -16, "party screen clamping must include the handle")
+assert(partyInfo.handleBackground.alpha == 0 and partyInfo.title.alpha == 0, "party handle must start invisible")
+assert(partyInfo.background.shown == false, "normal party layout must have no large background")
+partyHandle.scripts.OnEnter()
+assert(partyInfo.handleBackground.alpha == 1 and partyInfo.title.alpha == 1, "party hover must reveal handle artwork")
+assert(raidInfo.handleBackground.alpha == 0, "party hover must not reveal the raid handle")
+partyHandle.scripts.OnLeave()
+assert(partyInfo.handleBackground.alpha == 0, "party pointer leave must hide idle artwork")
+partyHandle.scripts.OnEnter()
+partyHandle.scripts.OnDragStart()
+partyHandle.scripts.OnLeave()
+assert(partyRoot.moving == true and partyInfo.handleBackground.alpha == 1, "party handle must remain visible during drag")
+partyHandle.scripts.OnDragStop()
+assert(partyRoot.moving == false and partyInfo.handleBackground.alpha == 0, "party release outside must stop and hide the handle")
+partyHandle.scripts.OnEnter()
+partyHandle.scripts.OnDragStart()
+partyHandle.scripts.OnDragStop()
+assert(partyInfo.handleBackground.alpha == 1, "party release under pointer must preserve hover")
 partyHandle.scripts.OnDragStart()
 assert(partyRoot.moving == true, "unlocked drag did not start")
 inCombat = true
 eventFrame.scripts.OnEvent(eventFrame, "PLAYER_REGEN_DISABLED")
 assert(partyRoot.moving == false, "combat start must release an in-flight drag")
+assert(partyInfo.handleBackground.alpha == 0 and partyHandle.mouseEnabled == false, "combat must hide and disable party handle")
 partyRoot:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 120, -80)
 partyHandle.scripts.OnDragStop()
 assert(partyRoot.moving == false, "drag stop must release the frame during combat")
@@ -785,23 +862,39 @@ partyHandle.scripts.OnDragStart()
 assert(partyRoot.moving == false, "combat must block a new drag")
 
 inCombat = false
+eventFrame.scripts.OnEvent(eventFrame, "PLAYER_REGEN_ENABLED")
+assert(partyHandle.mouseEnabled == true and partyInfo.handleBackground.alpha == 0, "combat exit must restore party hover without a stale highlight")
+partyHandle.scripts.OnEnter()
+partyHandle.scripts.OnDragStart()
 SlashCmdList.SIMPLEDISPEL("lock")
+assert(partyRoot.moving == false, "lock must stop a party drag in progress")
+assert(partyHandle.shown == false and partyHandle.mouseEnabled == false, "lock must hide and disable party handle")
+assert(partyRoot.height == 70 and createdButtons[1].point[5] == -4, "lock must not alter party geometry")
 partyHandle.scripts.OnDragStart()
 assert(partyRoot.moving == false, "locked frames must not drag")
 SlashCmdList.SIMPLEDISPEL("unlock")
+assert(partyHandle.shown == true and partyHandle.mouseEnabled == true, "unlock must restore the party hover area")
+assert(partyRoot.height == 70 and createdButtons[1].point[5] == -4, "unlock must not alter party geometry")
 
 -- The visibility driver hides the party frame when the group becomes a raid.
 -- A hidden frame never sees the mouse release, so the drag must end on hide.
 partyRoot:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 40, -60)
+partyHandle.scripts.OnEnter()
 partyHandle.scripts.OnDragStart()
 assert(partyRoot.moving == true, "drag did not start")
 partyRoot.scripts.OnHide(partyRoot)
 assert(partyRoot.moving == false, "hiding a frame mid-drag must release it")
+assert(partyInfo.handleBackground.alpha == 0, "party hide must clear hover artwork")
 assert(SimpleDispelDB.layouts.party.position.x == 40, "hide during drag must save the position")
 
 -- Hiding a frame that is not being dragged must not rewrite its saved position.
 SimpleDispelDB.layouts.party.position.x = 999
 partyRoot.scripts.OnHide(partyRoot)
 assert(SimpleDispelDB.layouts.party.position.x == 999, "idle hide must not touch the saved position")
+
+partyHandle.scripts.OnEnter()
+partyHandle.scripts.OnDragStart()
+partyHandle.scripts.OnHide()
+assert(partyRoot.moving == false and partyInfo.handleBackground.alpha == 0, "hiding the party handle must stop movement and clear hover")
 
 print("SimpleDispel mock runtime: PASS")

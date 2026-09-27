@@ -8,10 +8,6 @@ addon.Theme = Theme
 Theme.DEFAULT = "dark"
 Theme.Names = { "dark", "light" }
 
--- The "(drag)" hint is drawn with an inline colour code, so SetTextColor on the
--- title cannot reach it. One mid grey keeps it legible on both handle colours.
-Theme.DRAG_HINT_COLOR = "8a8f96"
-
 local PALETTES = {
     -- Dark palette: values are the pre-theme constants, kept byte for byte.
     dark = {

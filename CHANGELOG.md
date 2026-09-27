@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Replace the Party title bar and raid `SD` title anchor with a 16 × 28 pixel hover handle just outside each layout's top-left edge on the left. It appears on hover, stays visible during dragging, and hides when the pointer leaves after release. Locking and combat disable dragging; either also stops a drag already in progress.
+- Remove both layouts' 22-pixel title height and large title background from the normal dispel layout. Party frame height is now 70 pixels with names and 56 without; its 48 × 62 buttons, icon squares, and name bands are unchanged. Raid keeps its compact grid geometry without the old two-column minimum width. Include each side handle in screen clamping so it remains reachable near the screen edge.
+- Keep the existing independent Party/Raid scale settings and 100% defaults; use `/sd scale party 0.80` or `/sd scale raid 0.80` for 80% size. Add mock coverage for both handles, hover, drag cleanup, compact geometry, and lock/combat transitions; live-client verification remains pending.
+
 ## 1.6.0 — 2026-09-25
 
 - A character with no known friendly dispel now hides every SimpleDispel frame, including the drag handles, instead of showing the "no dispel spell available" panel. The frames return automatically, exactly as before, once a spell, specialization, or talent change makes a dispel available. The login message says the frames are hidden and how to bring them back.

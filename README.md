@@ -63,13 +63,13 @@ The party layout contains five horizontal slots:
 - `party3`
 - `party4`
 
-The player slot is always available. Missing party units are hidden by secure state drivers. Party buttons are 48 × 62 pixels by default: a 48 × 48 icon square with the member name in a dedicated 14-pixel band below it, so the name never competes with the debuff icon for space and remains visible when an aura icon is displayed.
+The player slot is always available. Missing party units are hidden by secure state drivers. Party buttons are 48 × 62 pixels by default: a 48 × 48 icon square with the member name in a dedicated 14-pixel band below it, so the name never competes with the debuff icon for space and remains visible when an aura icon is displayed. The party frame is 70 pixels high with names shown and 56 pixels high with names hidden. Removing the title bar does not change the member buttons, icon square, or name band.
 
 `/sd names hide` collapses that band, which turns every party button into a 48 × 48 square and shrinks the party frame by the same 14 pixels. Nothing inside the icon square moves: the debuff icon, its stack count, the spell watermark, and the duration text below the button all keep the position and size they have with the name band shown. Party members are then identified the same way raid members already are, by the normal unit-button tooltip. `/sd names show` restores the band. The setting is saved per account in `SimpleDispelDB.hidePartyNames` and defaults to showing the names, so upgrading changes nothing until you run the command yourself.
 
 Collapsing or restoring the band resizes protected action buttons, so unlike a theme switch it is subject to combat lockdown: a change requested during combat is applied when combat ends.
 
-The party layout is visible outside a raid and is also used when you are alone.
+The party layout is visible outside a raid and is also used when you are alone. It has no title bar or reserved title space. When unlocked and out of combat, hover just outside the frame's top-left edge on the left to reveal a 16 × 28 pixel drag handle. The handle stays visible while dragging and disappears when the pointer leaves after release.
 
 ### Raid
 
@@ -86,7 +86,7 @@ Raid entries are laid out by subgroup rather than by raw roster index. Occupied 
 
 SimpleDispel never reassigns which fixed `raidN` unit token a button is bound to; it only moves each button's on-screen position to reflect the member's subgroup. Members are not sorted by name, class, role, or debuff priority. The tooltip is for identification only; it is never parsed or used to make a combat decision. If subgroup data cannot be read for every raid member, the whole layout falls back to the original index-ordered 8-column grid rather than sorting some members and not others; `/sd status` reports this as `raidGroups=unavailable`.
 
-When the raid layout is locked, its title and large background are hidden and the grid is moved upward. Unlocking reveals the small `SD` drag anchor for positioning. During combat, a roster change may temporarily leave the raid frame at its previous size. The frame is resized and repositioned after combat ends, when protected layout changes are safe.
+The raid grid has no title bar or reserved title space, and its large background stays hidden while a dispel is available. When unlocked and out of combat, hover just outside the grid's top-left edge on the left to reveal the same 16 × 28 pixel drag handle. The handle stays visible while dragging and disappears when the pointer leaves after release. Both layouts use this compact side handle; their normal large backgrounds remain hidden while a dispel is available. Locking or entering combat disables the handle and stops any drag already in progress without changing the layout size or spacing. During combat, a roster change may temporarily leave the raid frame at its previous size. The frame is resized and repositioned after combat ends, when protected layout changes are safe.
 
 ### Range feedback
 
@@ -180,16 +180,18 @@ The repository contains development documents and mock tests in addition to the 
    /sd unlock
    ~~~
 
-5. Drag the Party title bar or the Raid layout's small `SD` anchor.
+5. For either layout, hover just outside its top-left edge on the left and drag the 16 × 28 pixel handle that appears.
 6. Lock the frames when the position is correct:
 
    ~~~text
    /sd lock
    ~~~
 
-Both party and raid positions are saved independently. Scale values are also saved independently. When locked, the raid title bar and large background are hidden and the raid grid moves up into the freed space; unlocking shows the small `SD` drag anchor again.
+Both party and raid positions are saved independently. Scale values are also saved independently. Neither layout has a title bar, even when unlocked; leave the frames unlocked if you want to use their hover handles whenever you are out of combat. Locking disables dragging without moving either layout.
 
-Layout movement, scale changes, spell-attribute changes, and raid frame resizing are subject to combat lockdown. If a change is requested during combat, SimpleDispel defers the protected update until combat ends.
+To make only one layout smaller, use `/sd scale party 0.80` or `/sd scale raid 0.80` for 80% size. The supported range is 0.60–2.00; the default is 1.00. The settings survive `/reload`, and `/sd scale party 1` or `/sd scale raid 1` restores the corresponding default size without resetting its position.
+
+Layout movement, scale changes, spell-attribute changes, and Party/Raid frame resizing are subject to combat lockdown. If a change is requested during combat, SimpleDispel defers the protected update until combat ends.
 
 ## Slash commands
 
@@ -199,7 +201,7 @@ Both `/sd` and `/simpledispel` are registered as command aliases.
 |---|---|
 | `/sd status` | Print addon version, client/build information, active mode, Aura Container support, filter, button/container counts, saved scales, active theme, party name visibility, raid layout orientation and subgroup availability, no-dispel visibility, active spell, and dispel cooldown state. |
 | `/sd lock` | Lock both layouts and disable dragging. |
-| `/sd unlock` | Unlock both layouts; drag the Party title bar or the Raid `SD` anchor. |
+| `/sd unlock` | Unlock both layouts; hover just outside either layout's top-left edge on the left for its drag handle. |
 | `/sd scale <0.60-2.00>` | Set the scale of the currently active layout. |
 | `/sd scale party <0.60-2.00>` | Set the party layout scale explicitly. |
 | `/sd scale raid <0.60-2.00>` | Set the raid layout scale explicitly. |
@@ -324,7 +326,7 @@ The repository contains two types of testing material.
 
 The files under [tests](tests) simulate enough of the WoW API to exercise the addon’s structural behavior without launching the game:
 
-- [tests/test.lua](tests/test.lua) checks SavedVariables migration, creation of five party and forty raid buttons, Aura Container creation, unit-button setup, grid placement, subgroup-sorted raid layout in both orientations, subgroup compression, and the index-order fallback, visibility drivers, raid size calculation, cooldown/GCD state updates, scale commands, party name band commands, reset behavior, and combat-deferred updates.
+- [tests/test.lua](tests/test.lua) checks SavedVariables migration, creation of five party and forty raid buttons, Aura Container creation, unit-button setup, grid placement, subgroup-sorted raid layout in both orientations, subgroup compression, and the index-order fallback, visibility drivers, Party/Raid size calculation, hover handles and drag cleanup, cooldown/GCD state updates, scale commands, party name band commands, reset behavior, and combat-deferred updates.
 - [tests/dispel_spells_test.lua](tests/dispel_spells_test.lua) checks class spell detection, known manual overrides, cross-character override fallback, and classes without a friendly dispel.
 - [tests/secure_button_test.lua](tests/secure_button_test.lua) checks fixed unit attributes, secure click registration, spell attributes, combined range/cooldown visual states, and party/raid visibility drivers.
 - [tests/aura_input_test.lua](tests/aura_input_test.lua) checks Aura Button initialization, icon sizing, duration/cooldown setup, native mouse motion, and click propagation.
