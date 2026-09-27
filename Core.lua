@@ -13,12 +13,10 @@ local RAID_COLUMNS = 8
 local PARTY_GAP = 6
 local RAID_GAP = 2
 local FRAME_PADDING = 4
--- Floor for the compact raid frame width: below two columns the drag handle
--- and its "SD" title have nowhere to sit without overlapping the buttons.
-local RAID_MIN_WIDTH = (RAID_BUTTON_SIZE * 2) + RAID_GAP + (FRAME_PADDING * 2)
-local HANDLE_HEIGHT = 22
+local HANDLE_WIDTH = 16
+local HANDLE_HEIGHT = 28
 local RANGE_UPDATE_INTERVAL = 0.25
-local EMPTY_STATE_HEIGHT = HANDLE_HEIGHT + (FRAME_PADDING * 2) + 40
+local EMPTY_STATE_HEIGHT = 70
 local MIN_SCALE = 0.60
 local MAX_SCALE = 2.00
 local NO_DISPEL_TITLE = "No dispel spell available"
@@ -184,6 +182,21 @@ end
 -- Nothing may leave a drag running, combat included.
 local activeDrag = nil
 
+local function RefreshDragHandles()
+    local canDrag = not addon.db.locked and not InCombatLockdown()
+    for _, frameInfo in pairs(addon.frames) do
+        if not canDrag then
+            frameInfo.handleHovered = false
+        end
+        local dragging = activeDrag and activeDrag.root == frameInfo.root
+        local alpha = canDrag and (frameInfo.handleHovered or dragging) and 1 or 0
+        -- Hide only the artwork: the small side hit area must still receive hover.
+        frameInfo.handleBackground:SetAlpha(alpha)
+        frameInfo.title:SetAlpha(alpha)
+        frameInfo.dragHandle:EnableMouse(canDrag)
+    end
+end
+
 local function StopDrag(layoutKey, root)
     if activeDrag and activeDrag.root == root then
         activeDrag = nil
@@ -193,6 +206,7 @@ local function StopDrag(layoutKey, root)
     -- this is safe to run mid-combat and must never be skipped.
     root:StopMovingOrSizing()
     SavePosition(layoutKey, root)
+    RefreshDragHandles()
 end
 
 local function StopActiveDrag()
@@ -207,23 +221,11 @@ local function UpdateLockState()
         return
     end
 
-    local canDrag = not addon.db.locked and not InCombatLockdown()
-    for layoutKey, frameInfo in pairs(addon.frames) do
-        frameInfo.dragHandle:EnableMouse(canDrag)
-        if layoutKey == "raid" then
-            frameInfo.dragHandle:SetShown(not addon.db.locked)
-            frameInfo.title:SetText("SD")
-            frameInfo.background:SetShown(not addon.db.locked or not addon.activeSpell)
-        else
-            frameInfo.dragHandle:SetShown(true)
-            frameInfo.dragHandle:SetAlpha(addon.db.locked and 0.72 or 1)
-            local title = frameInfo.titleBase
-            if not addon.db.locked then
-                title = title .. "  |cff" .. addon.Theme.DRAG_HINT_COLOR .. "(drag)|r"
-            end
-            frameInfo.title:SetText(title)
-        end
+    for _, frameInfo in pairs(addon.frames) do
+        frameInfo.dragHandle:SetShown(not addon.db.locked)
+        frameInfo.background:SetShown(not addon.activeSpell)
     end
+    RefreshDragHandles()
 
     if PositionRaidButtons then
         PositionRaidButtons()
@@ -332,7 +334,7 @@ local function ApplyRootVisibility(hasDispel)
     return true
 end
 
-local function CreateRoot(layoutKey, globalName, titleBase, width, height, visibilityDriver, compactHandle)
+local function CreateRoot(layoutKey, globalName, width, height, visibilityDriver)
     local root = CreateFrame("Frame", globalName, UIParent)
     root:SetSize(width, height)
     root:SetFrameStrata("MEDIUM")
@@ -343,14 +345,28 @@ local function CreateRoot(layoutKey, globalName, titleBase, width, height, visib
     background:SetAllPoints(root)
 
     local dragHandle = CreateFrame("Frame", nil, root)
-    if compactHandle then
-        dragHandle:SetPoint("TOPLEFT", root, "TOPLEFT", FRAME_PADDING, 0)
-        dragHandle:SetSize(RAID_BUTTON_SIZE, HANDLE_HEIGHT)
-    else
-        dragHandle:SetPoint("TOPLEFT", root, "TOPLEFT", 0, 0)
-        dragHandle:SetPoint("TOPRIGHT", root, "TOPRIGHT", 0, 0)
-        dragHandle:SetHeight(HANDLE_HEIGHT)
-    end
+    dragHandle:SetPoint("TOPRIGHT", root, "TOPLEFT", 0, -FRAME_PADDING)
+    dragHandle:SetSize(HANDLE_WIDTH, HANDLE_HEIGHT)
+    -- Include the external handle in screen clamping so it stays reachable.
+    root:SetClampRectInsets(-HANDLE_WIDTH, 0, 0, 0)
+    dragHandle:SetScript("OnEnter", function()
+        addon.frames[layoutKey].handleHovered = true
+        RefreshDragHandles()
+    end)
+    dragHandle:SetScript("OnLeave", function()
+        addon.frames[layoutKey].handleHovered = false
+        RefreshDragHandles()
+    end)
+    dragHandle:SetScript("OnHide", function()
+        local frameInfo = addon.frames[layoutKey]
+        if frameInfo then
+            frameInfo.handleHovered = false
+        end
+        if activeDrag and activeDrag.root == root then
+            StopDrag(layoutKey, root)
+        end
+        RefreshDragHandles()
+    end)
     dragHandle:RegisterForDrag("LeftButton")
     dragHandle:SetScript("OnDragStart", function()
         if addon.db.locked or InCombatLockdown() then
@@ -359,6 +375,7 @@ local function CreateRoot(layoutKey, globalName, titleBase, width, height, visib
         StopActiveDrag()
         activeDrag = { layoutKey = layoutKey, root = root }
         root:StartMoving()
+        RefreshDragHandles()
     end)
     dragHandle:SetScript("OnDragStop", function()
         StopDrag(layoutKey, root)
@@ -369,9 +386,13 @@ local function CreateRoot(layoutKey, globalName, titleBase, width, height, visib
     -- the drag would survive until the frame is shown again, still glued to the
     -- cursor.
     root:SetScript("OnHide", function()
+        if addon.frames[layoutKey] then
+            addon.frames[layoutKey].handleHovered = false
+        end
         if activeDrag and activeDrag.root == root then
             StopDrag(layoutKey, root)
         end
+        RefreshDragHandles()
     end)
 
     local handleBackground = dragHandle:CreateTexture(nil, "BACKGROUND")
@@ -379,6 +400,7 @@ local function CreateRoot(layoutKey, globalName, titleBase, width, height, visib
 
     local title = dragHandle:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     title:SetPoint("CENTER", dragHandle, "CENTER", 0, 0)
+    title:SetText(":")
 
     -- Keep protected unit buttons under one parent so the normal dispel UI can
     -- be replaced with an explanatory empty state when no spell is available.
@@ -387,7 +409,7 @@ local function CreateRoot(layoutKey, globalName, titleBase, width, height, visib
     content:SetAllPoints(root)
 
     local emptyState = CreateFrame("Frame", nil, root)
-    emptyState:SetPoint("TOPLEFT", root, "TOPLEFT", FRAME_PADDING, -HANDLE_HEIGHT)
+    emptyState:SetPoint("TOPLEFT", root, "TOPLEFT", FRAME_PADDING, -FRAME_PADDING)
     emptyState:SetPoint("BOTTOMRIGHT", root, "BOTTOMRIGHT", -FRAME_PADDING, FRAME_PADDING)
     emptyState:EnableMouse(false)
 
@@ -407,7 +429,6 @@ local function CreateRoot(layoutKey, globalName, titleBase, width, height, visib
         dragHandle = dragHandle,
         handleBackground = handleBackground,
         title = title,
-        titleBase = titleBase,
         content = content,
         emptyState = emptyState,
         emptyTitle = emptyTitle,
@@ -415,6 +436,7 @@ local function CreateRoot(layoutKey, globalName, titleBase, width, height, visib
     }
     addon.frames[layoutKey] = frameInfo
     ApplyFrameTheme(frameInfo)
+    RefreshDragHandles()
 
     -- No spell has been resolved yet while the UI is built, so a character
     -- without a dispel never flashes an empty frame before PLAYER_LOGIN.
@@ -489,7 +511,7 @@ end
 
 local function GetPartyFrameHeight()
     local bandHeight = PartyNamesShown() and PARTY_LABEL_HEIGHT or 0
-    return PARTY_BUTTON_SIZE + bandHeight + HANDLE_HEIGHT + (FRAME_PADDING * 2)
+    return PARTY_BUTTON_SIZE + bandHeight + (FRAME_PADDING * 2)
 end
 
 -- Hiding the names collapses a band that is part of each party button's own
@@ -538,11 +560,10 @@ local function CreatePartyUI(filterString)
     local width = (PARTY_BUTTON_SIZE * #definitions)
         + (PARTY_GAP * (#definitions - 1))
         + (FRAME_PADDING * 2)
-    local height = PARTY_BUTTON_HEIGHT + HANDLE_HEIGHT + (FRAME_PADDING * 2)
+    local height = PARTY_BUTTON_HEIGHT + (FRAME_PADDING * 2)
     local frameInfo = CreateRoot(
         "party",
         "SimpleDispelPartyFrame",
-        "SimpleDispel Party",
         width,
         height,
         "[group:raid] hide; show"
@@ -558,7 +579,7 @@ local function CreatePartyUI(filterString)
             PARTY_BUTTON_HEIGHT
         )
         local x = FRAME_PADDING + ((index - 1) * (PARTY_BUTTON_SIZE + PARTY_GAP))
-        button:SetPoint("TOPLEFT", frameInfo.content, "TOPLEFT", x, -(HANDLE_HEIGHT + FRAME_PADDING))
+        button:SetPoint("TOPLEFT", frameInfo.content, "TOPLEFT", x, -FRAME_PADDING)
     end
 
     -- Every party button is built with its name band, so this is what collapses
@@ -626,13 +647,6 @@ local function GetRaidSubgroups()
     return groups
 end
 
-local function GetRaidTopInset()
-    if addon.db and addon.db.locked then
-        return 0
-    end
-    return HANDLE_HEIGHT
-end
-
 -- Builds the raid grid once per refresh instead of once per button: every
 -- raid index gets a cell so state-driver-hidden buttons still resolve to a
 -- deterministic point, but only indices with a real roster slot influence
@@ -698,13 +712,12 @@ local function GetRaidFrameWidth(columns)
     local width = (RAID_BUTTON_SIZE * columns)
         + (RAID_GAP * (columns - 1))
         + (FRAME_PADDING * 2)
-    return math.max(RAID_MIN_WIDTH, width)
+    return width
 end
 
 local function GetRaidFrameHeight(rows)
     return (RAID_BUTTON_SIZE * rows)
         + (RAID_GAP * (rows - 1))
-        + GetRaidTopInset()
         + (FRAME_PADDING * 2)
 end
 
@@ -718,14 +731,13 @@ PositionRaidButtons = function()
     if not frameInfo then
         return
     end
-    local topInset = GetRaidTopInset()
     local cells = BuildRaidLayoutPlan()
     for index = 1, 40 do
         local button = addon.unitButtons["raid" .. index]
         if button then
             local cell = cells[index]
             local x = FRAME_PADDING + (cell.column * (RAID_BUTTON_SIZE + RAID_GAP))
-            local y = -(topInset + FRAME_PADDING + (cell.row * (RAID_BUTTON_SIZE + RAID_GAP)))
+            local y = -(FRAME_PADDING + (cell.row * (RAID_BUTTON_SIZE + RAID_GAP)))
             button:ClearAllPoints()
             button:SetPoint("TOPLEFT", frameInfo.content, "TOPLEFT", x, y)
         end
@@ -765,11 +777,9 @@ local function CreateRaidUI(filterString)
     local frameInfo = CreateRoot(
         "raid",
         "SimpleDispelRaidFrame",
-        "SD",
         width,
         height,
-        "[group:raid] show; hide",
-        true
+        "[group:raid] show; hide"
     )
 
     for index = 1, 40 do
@@ -798,10 +808,7 @@ local function UpdateDispelAvailability(spell)
     for _, frameInfo in pairs(addon.frames) do
         frameInfo.content:SetShown(hasDispel)
         frameInfo.emptyState:SetShown(not hasDispel)
-    end
-    local raidFrame = addon.frames.raid
-    if raidFrame then
-        raidFrame.background:SetShown(not addon.db.locked or not hasDispel)
+        frameInfo.background:SetShown(not hasDispel)
     end
     RefreshRaidFrameSize()
     ApplyRootVisibility(hasDispel)
@@ -984,6 +991,7 @@ local function PrintStatus()
 end
 
 local function PrintHelp()
+    Print("/sd options (open settings)")
     Print("/sd status")
     Print("/sd spell auto | /sd spell <spellID>")
     Print("/sd filter <" .. FILTER_HELP .. "> (then /reload)")
@@ -1001,18 +1009,18 @@ local function HandleSpellCommand(argument)
         addon.db.manualSpellID = nil
         addon:RefreshSpell()
         Print("spell selection set to auto")
-        return
+        return true
     end
 
     local spellID = tonumber(argument)
     local info = spellID and addon.Spells:GetInfo(spellID)
     if not info then
         Print("unknown spell ID: " .. tostring(argument))
-        return
+        return false
     end
     if not info.known then
         Print("spell is not known by this character: " .. info.name .. " (" .. spellID .. ")")
-        return
+        return false
     end
 
     addon.db.manualSpellID = spellID
@@ -1021,6 +1029,7 @@ local function HandleSpellCommand(argument)
     if InCombatLockdown() then
         Print("secure attributes will update after combat")
     end
+    return true
 end
 
 local function HandleFilterCommand(argument)
@@ -1123,9 +1132,13 @@ local function HandleNoDispelCommand(argument)
 end
 
 local function HandleLockCommand(locked)
+    if locked then
+        StopActiveDrag()
+    end
     addon.db.locked = locked
+    RefreshDragHandles()
     ApplyAllFrameSettings()
-    Print(locked and "party and raid frames locked" or "frames unlocked; drag the visible handle to move")
+    Print(locked and "party and raid frames locked" or "frames unlocked; hover just outside either grid's top-left edge on the left for its drag handle")
     if InCombatLockdown() then
         Print("layout will update after combat")
     end
@@ -1150,7 +1163,7 @@ local function ParseScaleArgument(argument)
     return scale, layoutKey
 end
 
-local function HandleScaleCommand(argument)
+local function HandleScaleCommand(argument, quiet)
     local scale, layoutKey = ParseScaleArgument(argument)
     if not scale or not layoutKey or scale < MIN_SCALE or scale > MAX_SCALE then
         Print(string.format("usage: /sd scale <%.2f-%.2f> [party|raid]", MIN_SCALE, MAX_SCALE))
@@ -1159,9 +1172,11 @@ local function HandleScaleCommand(argument)
 
     addon.db.layouts[layoutKey].scale = scale
     ApplyFrameSettings(layoutKey)
-    Print(string.format("%s scale set to %.2f", layoutKey, scale))
-    if InCombatLockdown() then
-        Print("layout will update after combat")
+    if not quiet then
+        Print(string.format("%s scale set to %.2f", layoutKey, scale))
+        if InCombatLockdown() then
+            Print("layout will update after combat")
+        end
     end
 end
 
@@ -1187,12 +1202,35 @@ local function ResetLayout(argument)
     end
 end
 
+-- Both entry points use the same validation and combat-deferred updates.
+-- Options always reads addon.db through getters: reset replaces layout tables.
+addon.Config = {
+    SetLocked = HandleLockCommand,
+    SetTheme = HandleThemeCommand,
+    SetNames = HandleNamesCommand,
+    SetRaidLayout = HandleRaidLayoutCommand,
+    SetNoDispel = HandleNoDispelCommand,
+    SetFilter = HandleFilterCommand,
+    SetSpell = HandleSpellCommand,
+    SetScale = function(layoutKey, scale)
+        HandleScaleCommand(layoutKey .. " " .. tostring(scale), true)
+    end,
+    ResetLayout = ResetLayout,
+    PrintStatus = PrintStatus,
+}
+
 local function HandleSlashCommand(message)
     local command, argument = string.match(message or "", "^%s*(%S*)%s*(.-)%s*$")
     command = string.lower(command or "")
     argument = string.lower(argument or "")
 
-    if command == "status" then
+    if command == "" or command == "options" then
+        if addon.Options then
+            addon.Options:Open()
+        else
+            PrintHelp()
+        end
+    elseif command == "status" then
         PrintStatus()
     elseif command == "spell" then
         HandleSpellCommand(argument)
@@ -1216,6 +1254,9 @@ local function HandleSlashCommand(message)
         ResetLayout(argument)
     else
         PrintHelp()
+    end
+    if addon.Options then
+        addon.Options:Refresh()
     end
 end
 
@@ -1254,6 +1295,9 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         InitializeDatabase()
         RegisterSlashCommands()
         CreateUI()
+        if addon.Options then
+            addon.Options:Register()
+        end
 
         self:RegisterEvent("PLAYER_LOGIN")
         self:RegisterEvent("PLAYER_ENTERING_WORLD")
@@ -1299,6 +1343,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         UpdateGroupLabels()
     elseif event == "PLAYER_REGEN_DISABLED" then
         StopActiveDrag()
+        RefreshDragHandles()
     elseif event == "PLAYER_REGEN_ENABLED" then
         if addon.pendingSpellRefresh then
             addon:RefreshSpell()

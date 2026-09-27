@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.7.0 — 2026-09-27
+
+- Replace the Party title bar and raid `SD` title anchor with a 16 × 28 pixel hover handle just outside each layout's top-left edge on the left. It appears on hover, stays visible during dragging, and hides when the pointer leaves after release. Locking and combat disable dragging; either also stops a drag already in progress.
+- Remove both layouts' 22-pixel title height and large title background from the normal dispel layout. Party frame height is now 70 pixels with names and 56 without; its 48 × 62 buttons, icon squares, and name bands are unchanged. Raid keeps its compact grid geometry without the old two-column minimum width. Include each side handle in screen clamping so it remains reachable near the screen edge.
+- Keep the existing independent Party/Raid scale settings and 100% defaults; use `/sd scale party 0.80` or `/sd scale raid 0.80` for 80% size. Add mock coverage for both handles, hover, drag cleanup, compact geometry, and lock/combat transitions; live-client verification remains pending.
+- Add a native Retail Settings page at `Options > AddOns > SimpleDispel`, opened by `/sd` or `/sd options`; `/sd help` continues to print the command list. The page covers locking, themes, no-dispel visibility, Party names and scale, Raid scale and subgroup orientation, layout resets, diagnostics, known-spell/automatic selection, custom spell-ID validation, and aura filters with a Reload UI action.
+- Add English, zhCN, and zhTW Settings labels while keeping slash commands and shared combat-deferred handlers. The passing four-suite mock run covers one-time category registration, persisted getters and command synchronization, reset replacement, setter-driven frame updates, 60%–200% bounds, combat-deferred layout changes, filter/reload separation, automatic and invalid manual spell paths, and custom-ID popup validation. Real-client layout, input, localization, and taint verification remain pending.
+
 ## 1.6.0 — 2026-09-25
 
 - A character with no known friendly dispel now hides every SimpleDispel frame, including the drag handles, instead of showing the "no dispel spell available" panel. The frames return automatically, exactly as before, once a spell, specialization, or talent change makes a dispel available. The login message says the frames are hidden and how to bring them back.
