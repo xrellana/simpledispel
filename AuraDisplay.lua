@@ -11,6 +11,16 @@ AuraDisplay.Filters = {
     all = "HARMFUL|DISPELLABLE",
 }
 
+-- Debuffs that any friendly dispel removes but that carry no dispel type, so
+-- none of the filters above can match them. Each one gets a second slot that
+-- matches by spell ID and draws over the regular slot.
+AuraDisplay.AnyDispelSpellIDs = {
+    [440313] = true, -- Devouring Rift (Mythic+ Xal'atath's Bargain: Devour)
+}
+AuraDisplay.AnyDispelFilter = "HARMFUL"
+-- Room above the regular aura button for its cooldown and contour children.
+local ANY_DISPEL_LEVEL_OFFSET = 4
+
 -- Blizzard icon art bakes a border into the outer edge of the texture, so the
 -- visible artwork starts a little inside it.
 local ICON_EDGE_CROP = 0.07
@@ -204,6 +214,30 @@ function AuraDisplay:GetFilter(mode)
     return self.Filters[mode] or self.Filters.mine
 end
 
+-- The client applies includeSpellIDs to a debuff on a friendly unit only when
+-- that spell is flagged never-secret; otherwise it silently drops the filter
+-- and the slot would show every debuff. Keep only the spells it will honour.
+function AuraDisplay:GetMatchableAnyDispelSpellIDs()
+    local neverSecret = Enum and Enum.SecrecyLevel and Enum.SecrecyLevel.NeverSecret
+    if not C_Secrets or not C_Secrets.GetSpellAuraSecrecy or neverSecret == nil then
+        return nil, "C_Secrets.GetSpellAuraSecrecy is unavailable"
+    end
+
+    local spellIDs, count = {}, 0
+    for spellID in pairs(self.AnyDispelSpellIDs) do
+        local ok, secrecy = pcall(C_Secrets.GetSpellAuraSecrecy, spellID)
+        if ok and secrecy == neverSecret then
+            spellIDs[spellID] = true
+            count = count + 1
+        end
+    end
+
+    if count == 0 then
+        return nil, "spell IDs are secret on this client"
+    end
+    return spellIDs, count
+end
+
 function AuraDisplay:Create(owner, unit, filterString, options)
     local supported, supportError = self:IsSupported()
     if not supported then
@@ -248,6 +282,19 @@ function AuraDisplay:Create(owner, unit, filterString, options)
         return nil, anchorError
     end
 
+    -- Optional: losing this slot must not cost the unit its regular display.
+    local anyDispelError
+    if options.anyDispelSpellIDs then
+        anyDispelError = self:AddAnyDispelSlot(
+            container,
+            owner,
+            auraButton,
+            anchor,
+            options.anyDispelSpellIDs,
+            CreateAuraButtonInitializer(owner, auraWidth, auraHeight, showDuration, iconBottomInset)
+        )
+    end
+
     -- Unit must be assigned after slots/groups so the container registers for
     -- the appropriate updates. Request one initial refresh after assignment.
     local unitOK, unitError = pcall(container.SetUnit, container, unit)
@@ -264,5 +311,38 @@ function AuraDisplay:Create(owner, unit, filterString, options)
         end
     end
 
-    return container
+    return container, nil, anyDispelError
+end
+
+function AuraDisplay:AddAnyDispelSlot(container, owner, regularButton, anchor, spellIDs, initializeButton)
+    local regularLevel
+    if regularButton and regularButton.GetFrameLevel then
+        local levelOK, level = pcall(regularButton.GetFrameLevel, regularButton)
+        if levelOK and type(level) == "number" then
+            regularLevel = level
+        end
+    end
+
+    local slotOK, anyDispelButton = pcall(container.AddAuraSlot, container, "anyDispel", self.AnyDispelFilter, {
+        candidateFilters = { includeSpellIDs = spellIDs },
+        initializeFrame = function(auraButton)
+            -- Draw over the regular slot whenever both hold an aura. Raise it
+            -- first: the initializer levels the contour off the cooldown.
+            if regularLevel and auraButton.SetFrameLevel then
+                pcall(auraButton.SetFrameLevel, auraButton, regularLevel + ANY_DISPEL_LEVEL_OFFSET)
+            end
+            initializeButton(auraButton)
+        end,
+    })
+    if not slotOK then
+        return anyDispelButton
+    end
+
+    local anchorOK, anchorError = pcall(function()
+        anyDispelButton:ClearAllPoints()
+        anyDispelButton:SetPoint(anchor, owner, anchor)
+    end)
+    if not anchorOK then
+        return anchorError
+    end
 end

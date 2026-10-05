@@ -9,7 +9,7 @@ It provides compact party and raid frames that show a Blizzard-filtered harmful 
 
 ## Current status
 
-- **Addon version:** `1.7.0`
+- **Addon version:** `1.8.0`
 - **Target client:** World of Warcraft Retail 12.1+ (`Interface: 120100`)
 - **Supported layouts:** solo/party and raid
 - **Supported units:** `player`, `party1`-`party4`, and `raid1`-`raid40`
@@ -40,6 +40,7 @@ The addon does **not** provide an automatic dispel decision engine. It does not 
 - Raid range feedback for the currently selected friendly-dispel spell, without disabling clicks.
 - Friendly-dispel cooldown feedback that keeps debuffs visible while marking the action as temporarily unavailable.
 - Native aura icon, application count, tooltip, and cooldown display where supported by the client.
+- Mythic+ *Xal'atath's Bargain: Devour* debuff (Devouring Rift), which has no dispel type but is removed by any friendly dispel, shown on top of the regular aura when the client allows matching it by spell ID (`/sd status` → `anyDispelDebuffs=`).
 - A separate Aura Container for every pre-created unit slot.
 - Secure unit-button actions that remain bound to fixed unit tokens.
 - Secure visibility drivers for units that join or leave the group.

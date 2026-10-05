@@ -314,6 +314,9 @@ addon.AuraDisplay = {
     IsSupported = function()
         return true
     end,
+    GetMatchableAnyDispelSpellIDs = function()
+        return { [440313] = true }, 1
+    end,
     Create = function(_, button, unit, filter, options)
         return {
             button = button,
@@ -495,6 +498,11 @@ assert(createdButtons[5].simpleDispelLabel.text == "Dora", "party4 name label wa
 assert(createdButtons[6].simpleDispelLabel.text == "", "raid1 must not keep a permanent name")
 assert(createdButtons[45].simpleDispelLabel.text == "", "raid40 must not keep a permanent name")
 assert(rawget(createdButtons[6], "labelMode") == nil, "compact raid button must not reserve a name area")
+for index, container in ipairs(addon.auraContainers) do
+    local spellIDs = container.options.anyDispelSpellIDs
+    assert(spellIDs and spellIDs[440313], "container " .. index .. " must also show any-dispel debuffs")
+end
+assert(addon.anyDispelStatus == "on (1 spell IDs)", "status must report the any-dispel slot")
 assert(addon.auraContainers[6].options.width == 28, "raid aura width is wrong")
 assert(addon.auraContainers[6].options.height == 28, "raid aura height is wrong")
 assert(addon.auraContainers[6].options.anchor == "CENTER", "raid aura must fill the compact square")

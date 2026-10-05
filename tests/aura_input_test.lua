@@ -100,9 +100,20 @@ end
 local function NewAuraContainer()
     local container = NewRegion()
 
-    function container:AddAuraSlot(_, _, options)
+    container.slots = {}
+
+    function container:AddAuraSlot(slotKey, filterString, options)
+        if self.failSlot == slotKey then
+            error("slot rejected")
+        end
         initializedAuraButton = NewRegion()
         options.initializeFrame(initializedAuraButton)
+        self.slots[#self.slots + 1] = {
+            key = slotKey,
+            filter = filterString,
+            options = options,
+            button = initializedAuraButton,
+        }
         return initializedAuraButton
     end
 
@@ -222,5 +233,78 @@ assert(
     Close(partyCoords[4] - partyCoords[3], partyCoords[2] - partyCoords[1]),
     "a square icon area must not stretch or crop the icon's aspect ratio"
 )
+
+-- Without an any-dispel spell list the container keeps its single slot.
+assert(#partyContainer.slots == 1, "no any-dispel slot may be added unless requested")
+
+-- Devouring Rift has no dispel type, so it gets a spell-ID slot of its own.
+-- The client honours that match on friendly units only for never-secret
+-- spells, and would otherwise show every debuff in the slot.
+C_Secrets = nil
+local spellIDs, secretsError = addon.AuraDisplay:GetMatchableAnyDispelSpellIDs()
+assert(spellIDs == nil and secretsError, "no secrecy API must mean no any-dispel slot")
+
+Enum = { SecrecyLevel = { NeverSecret = 0, Secret = 2 } }
+local secrecyBySpell = {}
+C_Secrets = {
+    GetSpellAuraSecrecy = function(spellID)
+        return secrecyBySpell[spellID] or Enum.SecrecyLevel.Secret
+    end,
+}
+spellIDs = addon.AuraDisplay:GetMatchableAnyDispelSpellIDs()
+assert(spellIDs == nil, "a secret spell must not be matched by ID")
+
+secrecyBySpell[440313] = Enum.SecrecyLevel.NeverSecret
+local matchCount
+spellIDs, matchCount = addon.AuraDisplay:GetMatchableAnyDispelSpellIDs()
+assert(spellIDs and spellIDs[440313] and matchCount == 1, "Devouring Rift must be matchable when never secret")
+
+local affixOwner = NewRegion()
+local affixContainer, affixError, anyDispelError = addon.AuraDisplay:Create(
+    affixOwner,
+    "party2",
+    "HARMFUL|RAID",
+    { width = 48, height = 48, anchor = "TOP", showDuration = true, anyDispelSpellIDs = spellIDs }
+)
+assert(affixContainer, tostring(affixError))
+assert(anyDispelError == nil, tostring(anyDispelError))
+assert(#affixContainer.slots == 2, "the any-dispel slot was not added")
+
+local regularSlot, anyDispelSlot = affixContainer.slots[1], affixContainer.slots[2]
+assert(regularSlot.filter == "HARMFUL|RAID", "the regular slot must keep the selected filter")
+assert(anyDispelSlot.filter == "HARMFUL", "the any-dispel slot must not require a dispel type")
+assert(
+    anyDispelSlot.options.candidateFilters.includeSpellIDs == spellIDs,
+    "the any-dispel slot must match only the listed spell IDs"
+)
+assert(
+    anyDispelSlot.button:GetFrameLevel() > regularSlot.button:GetFrameLevel(),
+    "the any-dispel aura must draw over the regular aura"
+)
+assert(anyDispelSlot.button.propagateMouseClicks == true, "clicks on the any-dispel aura must reach the unit button")
+local anyDispelPoint = anyDispelSlot.button.points[#anyDispelSlot.button.points]
+assert(anyDispelPoint[1] == "TOP" and anyDispelPoint[2] == affixOwner, "the any-dispel aura must share the icon area")
+
+-- A rejected any-dispel slot is reported but leaves the regular display intact.
+local failingContainer = NewAuraContainer()
+failingContainer.failSlot = "anyDispel"
+local realCreateFrame = CreateFrame
+function CreateFrame(frameType, ...)
+    if frameType == "AuraContainer" then
+        return failingContainer
+    end
+    return realCreateFrame(frameType, ...)
+end
+local keptContainer, keptError, rejectedError = addon.AuraDisplay:Create(
+    NewRegion(),
+    "party3",
+    "HARMFUL|RAID",
+    { size = 48, anyDispelSpellIDs = spellIDs }
+)
+CreateFrame = realCreateFrame
+assert(keptContainer == failingContainer, tostring(keptError))
+assert(not failingContainer.hidden, "a rejected any-dispel slot must not hide the container")
+assert(rejectedError, "a rejected any-dispel slot must be reported")
+assert(failingContainer.updated, "the container must still refresh its auras")
 
 print("SimpleDispel aura input propagation: PASS")

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.8.0 — 2026-10-06
+
+- Show Devouring Rift (440313), the Mythic+ *Xal'atath's Bargain: Devour* debuff, on every unit button by default. It has no dispel type, so none of the aura filters matched it, but any friendly dispel removes it. Each unit's Aura Container gets a second slot that matches it by spell ID and draws over the regular slot. Clicking the button still casts your selected dispel.
+- The client honours spell-ID matching on friendly debuffs only for spells flagged never-secret, and would otherwise show every debuff in that slot. The slot is therefore created only when `C_Secrets.GetSpellAuraSecrecy` reports the spell as never-secret, and `/sd status` reports the result as `anyDispelDebuffs=`. Live-client verification is pending.
+
 ## 1.7.0 — 2026-09-27
 
 - Replace the Party title bar and raid `SD` title anchor with a 16 × 28 pixel hover handle just outside each layout's top-left edge on the left. It appears on hover, stays visible during dragging, and hides when the pointer leaves after release. Locking and combat disable dragging; either also stops a drag already in progress.

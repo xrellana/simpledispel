@@ -459,7 +459,7 @@ local function AddUnitButton(root, definition, buttonWidth, filterString, showDu
     addon.buttons[#addon.buttons + 1] = button
     addon.unitButtons[definition.unit] = button
 
-    local container, auraError = addon.AuraDisplay:Create(
+    local container, auraError, anyDispelError = addon.AuraDisplay:Create(
         button,
         definition.unit,
         filterString,
@@ -469,10 +469,14 @@ local function AddUnitButton(root, definition, buttonWidth, filterString, showDu
             anchor = definition.auraAnchor or "CENTER",
             showDuration = showDuration,
             iconBottomInset = definition.iconBottomInset or 0,
+            anyDispelSpellIDs = addon.anyDispelSpellIDs,
         }
     )
     if container then
         addon.auraContainers[#addon.auraContainers + 1] = container
+        if anyDispelError then
+            addon.anyDispelError = addon.anyDispelError or tostring(anyDispelError)
+        end
     else
         addon.auraError = addon.auraError or tostring(auraError)
     end
@@ -893,6 +897,11 @@ end
 
 local function CreateUI()
     local filterString = addon.AuraDisplay:GetFilter(addon.db.filterMode)
+    local anyDispelSpellIDs, anyDispelStatus = addon.AuraDisplay:GetMatchableAnyDispelSpellIDs()
+    addon.anyDispelSpellIDs = anyDispelSpellIDs
+    addon.anyDispelStatus = anyDispelSpellIDs
+        and string.format("on (%d spell IDs)", anyDispelStatus)
+        or ("off: " .. tostring(anyDispelStatus))
     CreatePartyUI(filterString)
     CreateRaidUI(filterString)
     UpdateGroupLabels()
@@ -965,6 +974,7 @@ local function PrintStatus()
         addon.raidGroupsUnavailable and "unavailable" or "sorted",
         addon.db.showWithoutDispel and "show" or "hide"
     ))
+    Print("anyDispelDebuffs=" .. tostring(addon.anyDispelStatus))
 
     if spell then
         local cooldownStatus = "unknown"
@@ -987,6 +997,9 @@ local function PrintStatus()
 
     if addon.auraError then
         Print("last aura error: " .. addon.auraError)
+    end
+    if addon.anyDispelError then
+        Print("last any-dispel slot error: " .. addon.anyDispelError)
     end
 end
 

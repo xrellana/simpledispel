@@ -68,7 +68,7 @@ SimpleDispel 的“一键驱散”是：插件为固定 unit token 创建成员�
 
 | 能力 | 状态 | 代码证据 | review 说明 |
 |---|---|---|---|
-| Manifest、版本和 SavedVariables | 代码已实现 | `SimpleDispel.toc:1-14` | 当前版本为 `1.7.0`。加载是否无 Lua 错误仍需游戏内确认。 |
+| Manifest、版本和 SavedVariables | 代码已实现 | `SimpleDispel.toc:1-14` | 当前版本为 `1.8.0`。加载是否无 Lua 错误仍需游戏内确认。 |
 | Party 五个固定 slot | 代码已实现；mock 已覆盖 | `Core.lua:305-337`；`tests/test.lua:223-231` | 固定为 `player`、`party1`-`party4`；按钮保持 48 × 62（隐藏名字时 48 × 48），外框高度为 70/56。 |
 | Raid 四十个固定 slot | 代码已实现；mock 已覆盖 | `Core.lua:370-408`；`tests/test.lua:223-231` | 固定为 `raid1`-`raid40`，不动态重排。 |
 | Party/Raid 安全显示切换 | 代码已实现；mock 已覆盖 | `Core.lua:230-236`、`SecureButtons.lua:53-58`；`tests/test.lua:249-261` | 具体客户端 protected frame 行为仍待验证。 |
