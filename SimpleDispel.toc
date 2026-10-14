@@ -1,9 +1,9 @@
 ## X-Curse-Project-ID: 1656590
-## Interface: 120100
+## Interface: 120100, 120105
 ## Title: SimpleDispel
 ## Notes: Lightweight secure click-to-dispel party and raid frames for Retail 12.1+
 ## Author: SimpleDispel contributors
-## Version: 1.8.0
+## Version: 1.8.1
 ## SavedVariables: SimpleDispelDB
 
 Theme.lua

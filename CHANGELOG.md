@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.8.1 — 2026-10-14
+
+- Declare support for Retail 12.1.5 (`## Interface: 120100, 120105`), so the client no longer flags the addon as out of date. 120100 stays in the list for any region still on 12.1.0. No code changes: 12.1.5 removes or changes nothing SimpleDispel calls.
+- 12.1.5 fixes a client bug where `includeSpellIDs` could let unrelated auras into a slot that should show only specific never-secret spells. The Devouring Rift slot from 1.8.0 relied on that filter, so it would have been affected if it had turned on. It stays off for now because the client reports the spell as contextually secret; `/sd status` → `anyDispelDebuffs=` shows whether 12.1.5 changes that.
+- On 12.1.5 the client also refreshes Aura Containers on `UNIT_FLAGS` and `UNIT_FACTION`, so a unit button should update right away when a party member is mind-controlled or released. SimpleDispel needs no change for this.
+
 ## 1.8.0 — 2026-10-06
 
 - Show Devouring Rift (440313), the Mythic+ *Xal'atath's Bargain: Devour* debuff, on every unit button by default. It has no dispel type, so none of the aura filters matched it, but any friendly dispel removes it. Each unit's Aura Container gets a second slot that matches it by spell ID and draws over the regular slot. Clicking the button still casts your selected dispel.

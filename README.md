@@ -9,8 +9,8 @@ It provides compact party and raid frames that show a Blizzard-filtered harmful 
 
 ## Current status
 
-- **Addon version:** `1.8.0`
-- **Target client:** World of Warcraft Retail 12.1+ (`Interface: 120100`)
+- **Addon version:** `1.8.1`
+- **Target client:** World of Warcraft Retail 12.1+ (`Interface: 120100, 120105`)
 - **Supported layouts:** solo/party and raid
 - **Supported units:** `player`, `party1`-`party4`, and `raid1`-`raid40`
 - **Aura display:** one system-filtered harmful aura per unit
